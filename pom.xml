@@ -4,27 +4,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.mooc.hbase.example</groupId>
-    <artifactId>hbase-exmple</artifactId>
+    <groupId>org.mooc.big.example</groupId>
+    <artifactId>big-example</artifactId>
+    <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
 
-    <properties>
-        <hbase-version>1.2.6</hbase-version>
-    </properties>
-
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-server</artifactId>
-            <version>${hbase-version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-client</artifactId>
-            <version>${hbase-version}</version>
-        </dependency>
-    </dependencies>
+    <modules>
+        <module>big-parent</module>
+        <module>big-flink</module>
+        <module>big-hbase</module>
+    </modules>
 
 
 </project>
