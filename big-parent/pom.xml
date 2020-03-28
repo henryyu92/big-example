@@ -13,6 +13,7 @@
         <hbase-version>2.2.4</hbase-version>
         <flink-version>1.10.0</flink-version>
         <scala-version>2.11</scala-version>
+        <jdbc-version>8.0.18</jdbc-version>
     </properties>
 
     <repositories>
@@ -55,6 +56,30 @@
                 <groupId>org.apache.flink</groupId>
                 <artifactId>flink-scala_${scala-version}</artifactId>
                 <version>${flink-version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-connector-kafka_${scala-version}</artifactId>
+                <version>${flink-version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-connector-elasticsearch7_${scala-version}</artifactId>
+                <version>${flink-version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${jdbc-version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.bahir</groupId>
+                <artifactId>flink-connector-redis_2.11</artifactId>
+                <version>1.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
