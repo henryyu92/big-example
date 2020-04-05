@@ -4,12 +4,11 @@ import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.watermark.Watermark
 
 /**
-  * @author Administrator
-  * @date 2019/9/19
+  * 周期性生成 Watermark
   */
 class PeriodicAssigner extends AssignerWithPeriodicWatermarks[(String, Long, Int)]{
   val maxOutOfOrder = 1000L
-  var currentMaxTimestamp : Long = _
+  var currentMaxTimestamp : Long = Long.MinValue
   // 定义生成 watermark 逻辑
   override def getCurrentWatermark: Watermark = {
     new Watermark(currentMaxTimestamp - maxOutOfOrder)

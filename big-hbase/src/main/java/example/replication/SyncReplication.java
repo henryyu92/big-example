@@ -6,10 +6,6 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 
 import java.io.IOException;
 
-/**
- * @author Administrator
- * @date 2020/3/25
- */
 public class SyncReplication {
 
     public static void main(String[] args) {

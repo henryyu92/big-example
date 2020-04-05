@@ -1,11 +1,8 @@
-package example.window
+package example.window.function
 
 import org.apache.flink.api.common.functions.AggregateFunction
 
-/**
-  * @author Administrator
-  * @date 2019/9/19
-  */
+
 class CustomAverageAggregateFunction extends AggregateFunction[(String, Long),(Long, Long), Double]{
   // 初始化 (sum, count)
   override def createAccumulator(): (Long, Long) = (0L, 0L)

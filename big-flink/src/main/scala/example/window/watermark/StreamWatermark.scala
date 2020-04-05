@@ -7,10 +7,6 @@ import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.streaming.api.windowing.time.Time
 
-/**
-  * @author Administrator
-  * @date 2019/7/13
-  */
 object StreamWatermark {
 
   def main(args: Array[String]): Unit = {
