@@ -36,5 +36,43 @@ HBase 在 Scan 的时候可以设置多个 Filter，使得大量无效数据可�
 - ```PageFilter```：用于分页的 Filter，但是由于 HBase 中的 Filter 状态全部都是 Region 内有效的，Region 切换时其内部计数器会被清 0，因此可能导致扫描的数据跨 Region 导致返回数据量超过设定的页数量。使用 Scan 的 setLimit 方法可以实现分页功能
 - ```SingleColumnValueFilter```：用于根据列过滤数据，SingleColumnValue 必须遍历一行数据中的每一个 cell，因而不能和其他 Filter 组合成 FilterList
 
+### 过滤器
+HBase 提供了过滤器(Filter)根据列族、列、版本等更多的条件来对数据进行过滤。带有过滤器条件的 RPC 查询请求会把过滤器分发到各个 RegionServer，这样可以降低网络传输的压力。
+
+使用过滤器至少需要两类参数：
+- 抽象的操作符，HBase 提供了枚举类型的变量来表示这些抽象的操作符：LESS, LESS_OR_EQUAL, EQUAL, NOT_EQUAL, GREATER_OR_EQUAL, GREATER, NO_OP
+- 比较器，表示具体的比较逻辑
+#### RegexStringComparator
+RegexStringComparator 支持正则表达式的值比较。
+```
+// 正则表达式和 Java 正则表达式相同
+RegexStringComparator comparator = new RegexStringComparator("regex")
+SingleColumnValueFilter filter = new SingleValueFilter(cf, column, CompareOp.EQUAL, comparator);
+scan.setFilter(filter);
+```
+#### SubstringComparator
+SubstringComparator 用于检测一个字符串是否包含于值中，不区分大小写。
+```
+SubstringComparator comparator = new SbustringComparator("sub");
+SingleColumnValueFilter filter = new SingleValueFilter(cf, column, CompareOp.EQUAL, comparator);
+scan.setFilter(filter);
+```
+#### BinaryPrefixComparator
+BinaryPrefixComparator 是前缀二进制比较器，只比较前缀是否相同。
+```
+
+```
+#### BinaryComparator
+BinaryComparator 是二进制比较器，用于按照字典序比较 Byte 数据值。
+```
+```
+#### SingleColumnValueFilter
+#### SingleColumnVlaueExcludeFilter
+#### FamilyFilter
+FamilyFilter 用于过滤列族，但通常会在使用 Scan 过程中通过设定扫描的列族来实现，而不是直接使用 FamilyFilter 实现。
+#### QualifierFilter
+#### ColumnPrefixFilter
+ColumnPrefixFilter 用于列限定符的前缀过滤，即过滤包含某个前缀的所有列名。
+
 #### PUT
 
