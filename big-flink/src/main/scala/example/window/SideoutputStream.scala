@@ -17,7 +17,7 @@ object SideoutputStream {
         val dataArray = data.split(",")
         SensorReading(dataArray(0).trim, dataArray(1).trim.toLong, dataArray(2).trim.toDouble)
       })
-      .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[SensorReading](Time) {
+      .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[SensorReading](Time.minutes(1)) {
         override def extractTimestamp(element: SensorReading): Long = element.timestamp * 1000
       })
       .keyBy(_.id)

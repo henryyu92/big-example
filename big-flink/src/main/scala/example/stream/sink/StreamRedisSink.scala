@@ -22,11 +22,11 @@ object StreamRedisSink {
     new FlinkJedisPoolConfig.Builder().setHost("127.0.0.1").build
   }
 
-  def redisClusterConfig(): FlinkJedisPoolConfig = {
+  def redisClusterConfig(): FlinkJedisClusterConfig = {
     new FlinkJedisClusterConfig.Builder().build()
   }
 
-  def redisSentinelConfig(): FlinkJedisPoolConfig = {
+  def redisSentinelConfig(): FlinkJedisSentinelConfig = {
     new FlinkJedisSentinelConfig.Builder().build()
   }
 }
