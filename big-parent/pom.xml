@@ -81,6 +81,22 @@
                 <artifactId>flink-connector-redis_2.11</artifactId>
                 <version>1.0</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-api-scala-bridge_2.11</artifactId>
+                <version>1.10.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-planner_2.11</artifactId>
+                <version>1.10.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-common</artifactId>
+                <version>1.10.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
