@@ -19,6 +19,9 @@ object EnvFactory {
     def build: T
   }
 
+  /**
+    * build StreamExecutionEnvironment
+    */
   protected class StreamEnvBuilder extends EnvBuilder[StreamExecutionEnvironment] {
 
     val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment

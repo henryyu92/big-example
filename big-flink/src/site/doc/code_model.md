@@ -20,7 +20,7 @@ Flink 提供了三种获取执行环境的方式：
 
 ### 指定数据源
 ExecutionEnvironment 提供了不同的数据接入接口完成数据的初始化，将外部数据转换为 DataStream(流处理数据集) 或 DataSet(批处理处理集)。Flink 提供了多种从外部读取数据的连接器，包括批量和实时的数据连接器能够将 Flink 系统和其他第三方系统连接直接获取外部数据。
-#### 数据集的转换计算
+#### 数据集转换
 数据从外部系统读取并转换成 DataStream 或者 DataSet 数据集后，需要对数据集作各种转换计算操作。Flink 中的 Transformation 操作都是通过不同的 Operator 来实现，每个 Operator 内部通过实现 Function 接口完成数据的处理逻辑定义。DataStream 和 DataSet 提供了大量的转换算子，只需要定义算子执行的逻辑函数然后应用在数据转换操作 Operator 接口中即可。
 
 在 DataStream 数据经过不同的算子转换过程中，有些算子需要根据指定的 key 进行转换，需要先将 DataStream 或 DataSet 转换成对应的 KeyedStream 和 GroupedDataSet 将相同的 key 值的数据路由到相同的 pipline 中然后进行下一步的计算操作。分区 key 可以通过三种方式指定：
