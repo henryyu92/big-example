@@ -1,7 +1,7 @@
 package example.stream.env
 
 import org.apache.flink.api.scala.ExecutionEnvironment
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment
+import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 
 
 object EnvFactory {

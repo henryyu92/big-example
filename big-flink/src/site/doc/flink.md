@@ -1047,6 +1047,10 @@ env.registerTable("projectedTable", table)
 ```
 完成对 Table 的注册在内部 CataLog 生成相应的数据表信息就可以使用 SQL 语句对表进行处理完成数据转换操作。注册在 CataLog 中的 Table 类似关系数据库中的视图结构，当注册的表被引用和查询时数据才会在对应的 Table 中生成。多个语句同时查询一张表时，表中的数据将会被执行多次，且每次查询出的结果互相之间不共享。
 
-使用 Table API 时，可以将外部的数据源直接注册成 Table 数据结构，除了 Flink 内置的 Source 外，可以通过 TableSource 
+使用 Table API 时，可以将外部的数据源直接注册成 Table 数据结构，除了 Flink 内置的 Source 外，可以通过 TableSource 自定义数据源注册成 Table。
+```scala
+val env = StreamExecutionEnvironment.getExecutionEnvironment
+val tableEnv = TableEnvironment.getTableEnvironment(env);
+```
 ### Flink 监控调优
 ### Flink & Kafka
