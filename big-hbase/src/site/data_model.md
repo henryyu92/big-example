@@ -1,21 +1,4 @@
 
-### 定位 Meta 表
-HBase 一张表的数据是由多个 Region 构成，而这些 Region 是分布在整个集群的 RegionServer 上的。那么客户端在做任何数据操作时，都要先确定数据在哪个 Region 上，然后再根据 Region 和 RegionServer 信息读取数据。
-
-HBase 系统内部设计了一张特殊的表(hbase:meta)专门用来存放整个集群所有的 Region 信息，通过在 HBase Shell 环境下使用 ```describe 'hbase:meta'``` 命令可以看到 hbase:meta 表中只存在一个名为 info 的 column family。HBase 保证 hbase:meta 表始终只有一个 Region，这样可以保证 meta 表多次操作的原子性。
-
-```hbase:meta``` 表中每一行数据代表一个 Region，其中 rowkey 由 TableName(表名)、StartRow(Region 起始 rowkey)、Timestamp(Region 创建时间戳)、EncodedName(字段 MD5)拼接而成，info 列簇包含 4 个列：
-- ```info:regioninfo```：主要存储 EncodedName, RegionName, StartRow, StopRow
-- ```info:seqnumDuringOpen```：主要存储 Region 打开时的 sequenceId
-- ```info:server```：主要存储 Region 对应的 RegionServer
-- ```info:serverstartcode```：主要存储 Region 对应的 RegionServer 的启动 TimeStamp
-
-HBase 客户端缓存 hbase:meta 信息到 MetaCache，在调用 HBase API 时，客户端会先去 MetaCache 中找到 rowkey 所在的 Region，此时可能存在三种情况：
-- Region 信息为空，说明 MetaCache 中没有这个 rowkey 所在 Region 的信息，此时需要到 hbase:meta 中使用 Reversed Scan 获取到 rowkey 对应的 Region 信息，然后将 (regionStartRow, region) 这样的二元组信息存放在一个 MetaCache 中。这种情况一般发生在 HBase 客户端首次和服务端建立连接之后的少数几个请求内
-- Region 信息不为空，但是调用 RPC 请求对应 RegionServer 后发现 Region 并不在该 RegionServer 上，说明 MetaCache 信息过期了，此时需要 Reversed Scan hbase:meta 表获取 Region 并缓存。这种情况一般发生在 Region 发生迁移，发生的几率并不会很大
-- Region 信息不为空，且调用 RPC 请求到对应的 RegionServer 后能得到正确地结果，绝大部分的请求属于这种情况
-
-
 ## RegionServer
 RegionServer 是 HBase 系统中最核心的组件，主要负责用户数据写入、读取等基础操作。RegionServer 包含多个模块：HLog、MemStore、HFile 以及 BlockCache。
 
@@ -329,12 +312,6 @@ bin/hadoop jar ${HBASE_HOME}/hbase-server-Version.jar completebulkload <hdfs://s
 HBase 读数据的流程更加负责，主要有两个方面的原因：
 - HBase 一次范围查询可能会涉及多个 Region、多块缓存甚至多个数据存储文件
 - HBase 中更新操作是插入了新的以时间戳为版本数据，删除操作是插入了一条标记为 delete 标签的数据，读取的过程需要根据版本以及删除标签进行过滤
-
-HBase 读取流程可以分为 4 个步骤：
-- Client-Server 读取交互逻辑：客户端和服务器端交互流程
-- Server 端 Scan 数据：服务端处理 scan 请求
-- 过滤淘汰不符合查询条件的 HFile
-- 从 HFile 中读取待查找的 key
 
 #### Client-Server 交互
 Client 首先会从 ZooKeeper 中获取元数据 hbase:meta 表所在的 RegionServer，然后根据待读写 rowkey 发送请求到元数据所在的 RegionServer，获取数据所在的目标 RegionServer 和 Region 信息并保存到本地，最后将请求进行封装发送到目标 RegionServer 进行处理
