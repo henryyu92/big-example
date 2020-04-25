@@ -32,18 +32,27 @@ get /
 # 
 ```
 
-为了避免 scan 的数据量过大导致网络带宽被占用和客户端 OOM 的风险，客户端将 scan 操作分解为多次 RPC 请求，每个 RPC 请求为一次 next 请求，单次请求的数据行数可以由 scan 参数 ```caching``` 设定，默认值为 ```Integet.MAX_VALUE```。
+为了避免 scan 的数据量过大导致网络带宽被占用和客户端 OOM 的风险，客户端将 scan 操作分解为多次 RPC 请求，每个 RPC 请求为一次 next 请求，next 请求返回的一批数据会缓存到客户端，缓存的数据行数可以由 scan 参数 ```caching``` 设定，默认值为 ```Integet.MAX_VALUE```。
 
 为了防止列的数据量太大，HBase 的 scan 操作还可以通过参数 ```batch``` 设定每个 next 请求返回的列数；HBase 的 scan 操作还有 ```maxResultSize``` 参数用于设定每个 next 请求的数据大小，默认值 2G：
 ```java
-Scan scan = Table.scan();
-scan.setCaching();
-scan.setBatch();
-scan.setMaxResultSize();
+Scan scan = new Scan()
+        .withStartRow("startRow".getBytes())
+        .withStopRow("stopRow".getBytes())
+        .setCaching(1000)
+        .setBatch(10)
+        .setMaxResultSize(-1);
+ResultScanner scanner = table.getScanner(scan);
+Iterator<Result> it = scanner.iterator();
+while (it.hasNext()){
+    Result next = it.next();
+    // ...
+}
 ```
 
 ### 数据查询
 
-HBase 客户端在 scan 操作时根据 Region 中的 startKey 和 stopKey 将 scan 切分为多个小的 scan，然后将这些小的 scan 请求发送到对应的 RegionServer。
+HBase 客户端在 scan 操作时根据 Region 中的 startKey 和 stopKey 将 scan 切分为多个小的 scan，每个小的 scan 对应一个 Region，然后将这些小的 scan 请求发送到对应的 RegionServer。
 
+RegionServer 接收到客户端 scan 请求后，
 

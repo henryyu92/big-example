@@ -309,12 +309,8 @@ bin/hadoop jar ${HBASE_HOME}/hbase-server-Version.jar completebulkload <hdfs://s
 如果表没在集群中，工具会自动创建表。
 
 ### HBase 读取流程
-HBase 读数据的流程更加负责，主要有两个方面的原因：
-- HBase 一次范围查询可能会涉及多个 Region、多块缓存甚至多个数据存储文件
-- HBase 中更新操作是插入了新的以时间戳为版本数据，删除操作是插入了一条标记为 delete 标签的数据，读取的过程需要根据版本以及删除标签进行过滤
 
 #### Client-Server 交互
-Client 首先会从 ZooKeeper 中获取元数据 hbase:meta 表所在的 RegionServer，然后根据待读写 rowkey 发送请求到元数据所在的 RegionServer，获取数据所在的目标 RegionServer 和 Region 信息并保存到本地，最后将请求进行封装发送到目标 RegionServer 进行处理
 
 HBase Client 端的 scan 操作并没有设计为一次 RPC 请求，这是因为一次大规模的 scan 操作很有可能就是一次全表扫描，扫描结果非常大，通过一次 RPC 将大量扫描结果返回客户端会带来至少两个严重的后果：
 - 大量数据传输会导致集群网络带宽等系统资源短时间被大量占用，严重影响集群中其他业务
