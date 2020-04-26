@@ -1,6 +1,6 @@
 ## HBase 读流程
 
-客户端从 HBase 中读取数据涉及到 RegionServer 的缓存、MemStore 以及 HFile，因此 HBase 的数据读取流程比较复杂。另外，由于更新操作是插入了新的以时间戳为版本数据，删除操作是插入了一条标记为 delete 标签的数据，读取数据时还需要根据版本以及删除标签进行过滤。
+客户端从 HBase 中读取数据流程相较于写入数据流程来说更加复杂，其整个读取过程中涉及多个 Region，多个缓存以及多个 HFile。另外更新操作是插入了新的以时间戳为版本数据，删除操作是插入了一条标记为 delete 标签的数据，因此在读取数据时还需要根据版本以及删除标签进行过滤。
 
 HBase 提供 get 和 scan 两种方式读取数据，其中 get 是 scan 的一种特殊形式。HBase 的整个数据读取流程可以分为两部分：Region 定位、数据查询。
 
@@ -54,5 +54,22 @@ while (it.hasNext()){
 
 HBase 客户端在 scan 操作时根据 Region 中的 startKey 和 stopKey 将 scan 切分为多个小的 scan，每个小的 scan 对应一个 Region，然后将这些小的 scan 请求发送到对应的 RegionServer。
 
-RegionServer 接收到客户端 scan 请求后，
+RegionServer 接收到客户端 scan 请求后，首先构建三层 Scanner 体系，包括：RegionScanner, StoreScanner, MemStoreScanner 和 StoreFileScanner。其中 RegionScanner 位于最顶层，一个 RegionScanner 包含多个 StoreScanner，每个 StoreScanner 对应 Region 的一个 ColumFamily；StoreScanner 位于整个体系的第二层，一个 StoreScanner 由一个 MemStoreScanner 和多个 StoreFileScanner，每个 StoreFileScanner 对应一个 HFile。RegionScanner 以及 StoreScanner 并不负责实际查找操作，而是承担调度任务，实际负责数据查询任务的是 StoreFileScanner 和 MemStoreScanner。
+```
+                        +-------------------------+
+                        |  RegionScanner(HRegion) |
+                        +-------------------------+
+                            |               |
+        +---------------------+         +---------------------+
+        |  StoreScnner(Store) |         |  StoreScnner(Store) |
+        +---------------------+         +---------------------+
+                                            |               |
+                +----------------------------+          +-----------------------------+
+                |  MemStoreScanner(MemStore) |          |  StoreFileScanner(MemStore) |
+                +----------------------------+          +-----------------------------+
+```
+RegionServer 构建完 Scanner 体系之后首先会过滤调一些无用的 Scanner。RegionServer 会为每个 HFile 创建一个 StoreFileScanner，但是查找的数据可以通过条件确定不属于某些 HFile，这些 HFile 对应的 StoreFileScanner 就不会参与到数据的查找过程中。
+
+
+
 
