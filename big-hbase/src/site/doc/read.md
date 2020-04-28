@@ -68,8 +68,37 @@ RegionServer 接收到客户端 scan 请求后，首先构建三层 Scanner 体�
                 |  MemStoreScanner(MemStore) |          |  StoreFileScanner(MemStore) |
                 +----------------------------+          +-----------------------------+
 ```
-RegionServer 构建完 Scanner 体系之后首先会过滤调一些无用的 Scanner。RegionServer 会为每个 HFile 创建一个 StoreFileScanner，但是查找的数据可以通过条件确定不属于某些 HFile，这些 HFile 对应的 StoreFileScanner 就不会参与到数据的查找过程中。
+RegionServer 构建完 Scanner 体系之后还需要完成三个核心步骤：
+- 过滤不必要的 Scanner
+- seek 到每个 HFile/MemSotre 的 startKey，定位到 startKey 之后只需要调用 Scanner 的 next 方法就可以获取下一个数据
+- 将 Store 中的 StoreFileScanner 和 MemStoreScanner 合并成一个最小堆，按照 Scanner 排序规则将查找到的数据由小到大进行排序，保证 scan 出来的数据保证有序性
 
+RegionServer 会为每个 HFile 创建一个 StoreFileScanner，但是查找的数据可以通过条件确定不属于某些 HFile，这些 HFile 对应的 StoreFileScanner 就不会参与到数据的查找过程中。过滤 Scanner 主要手段有三种：KeyRnage 过滤、TimeRange 过滤 和 布隆过滤器过滤。
+- **KeyRange 过滤**：StoreFile 中所有 K-V 数据都是有序排列的，所以如果 scan 的 rowkey 范围 [startrow, stoprow] 与文件起始 key 范围 [firstkey, lastkey] 没有交集，就可以过滤掉该 StoreScanner
+- **TimeRange 过滤**：StoreFile 元数据有一个关于该 HFile 的 TimeRange 属性 [miniTimestamp, maxTimestamp]，如果 scan 的 TimeRange 与该文件时间范围没有交集，就可以过滤掉该 StoreScanner
+- **布隆过滤器过滤**：根据待检索的 rowkey 获取对应的 Bloom Block 并加载到内存(通常情况下，热点 Bloom Block 会常驻内存)，再用 hash 函数对待检索 rowkey 进行 hash，根据 hash 后的结果在布隆过滤器数据中进行寻址，即可确定待检索 rowkey 是否一定不存在于该 HFile
+
+确定待检索的数据可能存在于哪些 HFile 之后，RegionServer 需要再这些 HFile 中定位到待检索的数据的起始位置，再 HFile 中查找数据需要 4 个步骤：
+- **定位目标 Block**：HRegionServer 打开 HFile 时会将 HFile 的 Trailer 部分和 Load-on-open 部分加载到内存，Load-on-open 部分有索引树根结点 Root Index Block，在 Root Index Block 中通过二分查找即可定位到 rowkey 所在的 Data Block
+- **BlockCache 中检索目标 Block**：Block 会缓存到 Block Cache 中，其中的 key 是 BlockKey（由 HFile 的名称以及 Block 在 HFile 中的偏移量构成，全局唯一），value 是 Block 在 BlockCache 中的地址，RegionServer 会先再 Block Cache 中检索对应的 Block，如果没有检索到则需要到 HDFS 中检索
+- **HDFS 文件中检索目标 Block**：文件索引提供的 Block offset 以及 Block datasize 这两个元素可以在 HDFS 上读取到对应的 Data Block 内容(HFileBlock.FSReaderImpl.readBlockData 方法)。HBase 会在加载 HFile 的时候为每个 HFile 新建一个从 HDFS 读取数据的数据流 FSDataInputStream，之后所有对该 HFile 的读取操作都会使用这个文件几倍的 InputStream 进行操作。
+- **从 Block 中读取待查找数据**：
+
+使用 FSDataInputStream 读取 HFile 中的数据块，命令下发到 HDFS 首先会联系 NameNode 组件，NameNode 组件会做两件事：
+- 找到属于这个 HFile 的所有 HDFSBlock 列表，确认待查找数据在哪个 HDFSBlock 上(HDFS 的 DataBlock 大小等于 128M)
+- 确认定位到的 HDFSBlock 在哪些 DataNode 上，选择一个最优 DataNode 返回给客户端
+
+NameNode 告知 HBase 可以去特定 DataNode 上访问特定 HDFSBlock，之后 HBase 请求对应的 DataNode 数据块，DataNode 找到指定的 HDFSBlock，seek 到指定偏移量，从磁盘读出指定大小的数据返回。DataNode 读取数据实际上是向磁盘发送读取指令，磁盘接收到读取指令之后会移动磁头到给定位置，读取出完整的 64K 数据返回
+
+HDFS 的 Block 设计为 128M 是因为当数据量大到一定程度，如果 Block 太小会导致 Block 元数据非常庞大，使得 NameNode 成为整个集群瓶颈；HBase 的缓存策略是缓存整个 Block，如果 Block 太大容易导致缓存内存很容易耗尽
+
+
+
+完成 Scanner 体系构建及其相关的准备工作之后，scan 到的 K-V 数据已经可以获得，但是还需要再进一步的判断这些数据是否满足 TimeRange 条件、版本条件以及 Filter 条件：
+- 检查 K-V 数据的 KeyType 是否是 Delete, DeleteColumn, DeleteFamily 等，如果是则直接忽略改列的所有版本
+- 检查 K-V 数据的 Timestamp 是否再设定的 TimeRange 范围内，如果不再则忽略
+- 检查 K-V 数据是否满足设定的 filter，如果不满足则忽略
+- 检查 K-V 数据是否满足设定的版本数，忽略不满足的版本数据
 
 
 
