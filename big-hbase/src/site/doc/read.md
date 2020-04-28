@@ -23,18 +23,16 @@ describe 'hbase:meta'
 ```hbase:meta``` 表中每一行数据代表一个 Region，其中 rowkey 由 TableName(表名)、StartRow(Region 起始 rowkey)、Timestamp(Region 创建时间戳)、EncodedName(字段 MD5)拼接而成，HBase 保证 ```hbase:meta``` 表始终只有一个 Region，这样可以保证 meta 表多次操作的原子性。
 
 
-HBase 客户端缓存 ```hbase:meta``` 信息到 MetaCache，客户端在根据 rowkey 查询数据时首先会到 MetaCache 中查找 rowkey 对应的 Region 信息，如果查找不到或者根据对应的 Region 信息到对应的 RegionServer 上不能找到数据，则会到 ```hbase:meta``` 表中使用 Reserved Scan 获取新的 rowkey 对应的 Region 信息，然后将 ```(regionStartRow, region)``` 二元组信息存放在 MetaCache 中。
+HBase 客户端缓存 ```hbase:meta``` 信息到 MetaCache，客户端在根据 rowkey 查询数据时首先会到 MetaCache 中查找 rowkey 对应的 Region 信息，如果查找不到或者根据 Region 信息到对应的 RegionServer 上不能找到数据，则会到 ```hbase:meta``` 表中使用 Reserved Scan 获取新的 rowkey 对应的 Region 信息，然后将 ```(regionStartRow, region)``` 二元组信息存放在 MetaCache 中。
 
-```hbase:meta``` 表也是在 RegionServer 上，HBase 中 ```hbase:meta``` 所在 RegionServer 的信息存储在 ZK 上，客户端在获取 rowkey 对应的 RegionServer 前需要从 ZK 上获取到 ```hbase:meta``` 表所在的 RegionServer。
+```hbase:meta``` 表也是存储在 RegionServer 上，其所在的 RegionServer 的信息存储在 ZK 上，客户端获取 ```hbase:meata``` 表中的数据之前需要从 ZK 上获取到 ```hbase:meta``` 表所在的 RegionServer。
 ```shell
 get /
 
 # 
 ```
 
-为了避免 scan 的数据量过大导致网络带宽被占用和客户端 OOM 的风险，客户端将 scan 操作分解为多次 RPC 请求，每个 RPC 请求为一次 next 请求，next 请求返回的一批数据会缓存到客户端，缓存的数据行数可以由 scan 参数 ```caching``` 设定，默认值为 ```Integet.MAX_VALUE```。
-
-为了防止列的数据量太大，HBase 的 scan 操作还可以通过参数 ```batch``` 设定每个 next 请求返回的列数；HBase 的 scan 操作还有 ```maxResultSize``` 参数用于设定每个 next 请求的数据大小，默认值 2G：
+为了避免 scan 的数据量过大导致网络带宽被占用和客户端 OOM 的风险，客户端将 scan 操作分解为多次 RPC 请求，每个 RPC 请求为一次 next 请求，next 请求返回的一批数据会缓存到客户端，缓存的数据行数可以由 scan 参数 ```caching``` 设定，默认值为 ```Integet.MAX_VALUE```。为了防止列的数据量太大，HBase 的 scan 操作还可以通过参数 ```batch``` 设定每个 next 请求返回的列数；HBase 的 scan 操作还有 ```maxResultSize``` 参数用于设定每个 next 请求的数据大小，默认值 2G：
 ```java
 Scan scan = new Scan()
         .withStartRow("startRow".getBytes())
