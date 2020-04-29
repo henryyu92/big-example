@@ -1,5 +1,8 @@
 ## HFile
 
+HBase 中 MemStore 的大小达到阈值之后会触发 flush，flush 之后每个 MemStore 都会转变成 StoreFile 以 HFile 的格式存储在 HDFS 上。
+
+
 MmeStore 中数据落盘之后会形成一个文件写入 HDFS，这个文件称为 HFile，HFile 文件主要分为 4 个部分：
 - ```Scanned Block```：表示顺序扫描 HFile 时所有的数据块将会被读取，包括 3 中数据块：Data Block、Leaf Index Block 以及 Bloom Block。其中 Data Block 中存储用户的 k-v 数据，Leaf Index Block 存储索引树的叶子节点数据，Bloom Block 中存储布隆过滤器相关数据
 - ```Non-canned Block```：表示在 HFile 顺序扫描的时候数据不会被读取，主要包括 Meta Block 和 Intermediate Level Data Index Block 两部分
