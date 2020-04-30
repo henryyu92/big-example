@@ -12,5 +12,12 @@
 
     <artifactId>big-kafka</artifactId>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_${scala-version}</artifactId>
+        </dependency>
+    </dependencies>
+
 
 </project>

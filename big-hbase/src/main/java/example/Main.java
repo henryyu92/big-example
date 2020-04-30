@@ -2,13 +2,10 @@ package example;
 
 import org.apache.hadoop.hbase.util.HasThread;
 
-/**
- * @author Administrator
- * @date 2020/4/4
- */
+
 public class Main extends HasThread {
 
-    private volatile boolean loop = false;
+    private volatile boolean loop;
 
     public Main(){
         super("Main in test");

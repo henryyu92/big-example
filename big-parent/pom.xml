@@ -21,6 +21,7 @@
         <hbase-version>2.2.4</hbase-version>
         <flink-version>1.10.0</flink-version>
         <scala-version>2.11</scala-version>
+        <kafka-version>2.4.1</kafka-version>
         <jdbc-version>8.0.18</jdbc-version>
     </properties>
 
@@ -104,6 +105,13 @@
                 <groupId>org.apache.flink</groupId>
                 <artifactId>flink-table-common</artifactId>
                 <version>1.10.0</version>
+            </dependency>
+
+
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka_${scala-version}</artifactId>
+                <version>${kafka-version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
