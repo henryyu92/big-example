@@ -634,6 +634,7 @@ public class BroadcastAssigner extends AbstractPartitionAssinger{
 通过自定义分区器，可以实现在同一个消费组中的不同消费者消费同一个分区中的消息，但是同一个消费组中的消费者不能消费同一个消息。
 
 ####  消费者协调器
+当消费者配置了不同的分区策略，多个消费者之间的分区分配需要通过消费者协调器(ConsumerCoordinator) 和组协调器(GroupCoordinator) 来完成
 
 
 ### 再均衡
