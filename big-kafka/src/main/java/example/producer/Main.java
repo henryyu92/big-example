@@ -1,8 +1,10 @@
 package example.producer;
 
 import example.ConfigurationBuilder;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.util.Properties;
@@ -37,6 +39,27 @@ public class Main {
         producer.close();
     }
 
+    private static <K, V> void callbackSend(Properties properties, String topic, V value){
+        // 创建生产者
+        KafkaProducer<K, V> producer = new KafkaProducer<>(properties);
+        // 创建消息
+        ProducerRecord<K, V> record = new ProducerRecord<>(topic, value);
+
+        try{
+            producer.send(record, (metadata, exception) -> {
+                if (exception != null){
+                    // 消息重试或者记录失败消息
+                    exception.printStackTrace();
+                }
+                System.out.println(metadata.topic() + "-" + metadata.partition() + "-" + metadata.offset());
+            });
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        producer.close();
+    }
+
     /**
      * 默认生产者
      *
@@ -55,6 +78,17 @@ public class Main {
 
         model(properties, "model-topic", "hello kafka");
 
+    }
+
+    public static void retriedProducer(String broker){
+        Properties properties = ConfigurationBuilder.newProducerConfigBuilder()
+                .keySerializer(StringSerializer.class)
+                .valueSerializer(StringSerializer.class)
+                .brokers(broker)
+                .id("producer.client.demo")
+                .retries(10)
+                .build();
+        callbackSend(properties, "retries-topic", "hello callback");
     }
 
     /**

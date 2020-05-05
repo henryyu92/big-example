@@ -1,6 +1,10 @@
 ### 编程模型
-生产者负责向 Kafka 发送消息的客户端，生产者编程模型包含几个步骤：
-- 配置生产者客户端参数并创建相应的生产者实例
+
+生产者是负责向 Kafka 发送消息的客户端，Kafka 实现了多种语言的客户端。
+
+
+生产者编程模型包含几个步骤：
+- 配置生产者客户端参数并创建相应的生产者实例 
 - 构建待发送的消息
 - 发送消息
 - 关闭生产者实例
@@ -57,7 +61,7 @@ public KafkaProducer(final Map<String, Object> configs)
 public KafkaProducer(Properties properties)
 ```
 **KafkaProducer 是线程安全的，可以在多个线程中共享单个实例，也可以将 Kafka 实例进行池化来供其它线程调用。**
-#### 创建消息对象
+#### 消息对象
 消息对象 ProducerRecord 并不是单纯意义上的消息，它包含了多个属性：
 - topic 和 partition 字段代表消息要发往的主题和分区号
 - header 字段表示消息的头部，用于设置应用相关的信息
@@ -207,7 +211,7 @@ properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, CustomSerializer.clas
 properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, CustomSerializer.class.getName());
 ```
 ### 分区器
-消息在通过 send 方法发往 broker 的过程中需要经过拦截器、序列化器和分区器的作用。消息经过序列化后需要分区器确定发往的分区，如果消息指定了 partition 则直接发往该分区否则分区器根据消息的 key 计算发往的分区。
+消息在通过 send 方法发往 broker 的过程中需要经过拦截器、序列化器和分区器的作用。消息经过序列化后需要分区器确定发往的分区，如果消息(ProducerRecord)指定了 partition 则直接发往该分区否则分区器根据消息的 key 计算发往的分区。
 
 Kafka 中分区器需要实现 ```org.apache.kafka.clients.producer.Partitioner``` 接口，接口定义了两个方法：
 - ```partition``` 方法用来计算分区号
@@ -216,6 +220,8 @@ Kafka 中分区器需要实现 ```org.apache.kafka.clients.producer.Partitioner`
 Kafka 提供了默认分区器 ```DefaultPartitioner```，partition 方法中的分区策略是：
 - 如果 key 不为 null 则对 key 进行哈希(采用 MurmurHash2 算法)，然后根据哈希值对 topic 所有的分区取模获取分区号
 - 如果 key 为 null，则查找 topic 的所有可用分区，然后通过轮询的方式将消息发往这些分区
+
+在不改变主题分区数量的情况下，key 与分区之间的映射可以保持不变，一旦主题增加了分区，那么就难以保证 key 与分区之间的映射关系了。
 ```java
 public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
     // 主题的所有分区
@@ -268,7 +274,9 @@ public class CustomerPartitioner implements Partitioner{
 ```java
 properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, CustomerPartitioner.class.getName());
 ```
-### 消息发送
+
+### 消息发送流程
+
 生产者客户端由两个线程协调运行，分别为主线程和 Sender 线程。在主线程中 KafkaProducer 创建的消息经过拦截器、序列化器和分区器作用之后缓存到消息累加器(RecordAccumulator)中，Sender 线程负责从 RecordAccumulator 中获取消息并将其发送到 broker 中。
 ```java
 @Override
@@ -292,7 +300,7 @@ public Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callb
 	// ...
 }
 ```
-RecordAccumulator 主要用于缓存消息以便 Sender 线程可以批量发送消息从而减少网络传输的资源消耗，缓存的大小可以通过 ```buffer.memory``` 参数控制，默认是 33554432B 即 32M；如果生产者发送消息的速度过快则 send 方法会阻塞超时后抛出异常，阻塞时间由 ```max.block.ms``` 参数控制，默认是 60000 即 60s。
+RecordAccumulator 主要用于缓存消息以便 Sender 线程可以批量发送消息从而减少网络传输的资源消耗以提升性能，缓存的大小可以通过 ```buffer.memory``` 参数控制，默认是 33554432B 即 32M；如果生产者发送消息的速度过快则 send 方法会阻塞超时后抛出异常，阻塞时间由 ```max.block.ms``` 参数控制，默认是 60000 即 60s。
 
 RecordAccumulator 通过 ```ConcurrentMap<TopicPartition, Deque<ProducerBatch>> ``` 为每个分区维护一个存储 ```ProducerBatch``` 的双端队列，主线程中发送的消息将会被追加到 RecordAccumulator 的与 TopicPartition 对应分区的双端队列 ```Deque<ProducerBatch>``` 中，消息写入 Deque 的尾部，Sender 线程从 Deque 的头部消费。
 ```java
@@ -305,9 +313,9 @@ public final class RecordAccumulator{
     // ...
 }
 
-
-
 ```
+
+客户端的消息是以字节的方式传输到 broker，Kafka 客户端中是以 ByteBuffer 实现消息在内存的创建和释放，RecordAccumulator 内部实现了一个 BufferPool 用于重复利用 ByteBuffer 从而减少重复的创建和销毁 ByteBuffer。BufferPool 只针对特定大小的 ByteBuffer 进行管理，而其他大小的 ByteBuffer 不会缓存仅 BufferPool 中，这个特定大小由 ```batch.size``` 参数决定，默认值为 16384B，即 16K
 
 ProducerBatch 包含一个或多个 ProducerRecord 这样使得网络请求减少提升吞吐量，当消息缓存到 Accumulator 时首先查找消息分区对应的双端队列(如果没有则创建)，再从这个双端队列的尾部获取一个 ProducerBatch(如果没有则创建)，如果可以写入则写入否则创建一个新的 ProducerBatch，在新建 ProducerBatch 时如果消息大小不超过 ```batch.size``` 则创建大小为 batch.size 的 ProducerBatch，否则按照消息的实际大小创建。为了避免频繁的创建和销毁 ProducerBatch，RecordAccumulator 内部维护一个 BufferPool，当 ProducerBatch 的大小不超过 ```batch.size``` 则这块内存将交由 BuffPool 来管理进行复用。
 ```java
@@ -326,12 +334,14 @@ private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, H
 ```
 Sender 线程从 RecordAccumulator 中获取缓存的 ProducerBatch 之后将 <TopicPartition, Deque<ProducerBatch>> 数据结构的消息转换为 <Node, List<ProducerBatch>> 数据结构的消息，其中 Node 表示 broker 节点。转换完成之后 Sender 还会进一步封装成 <Node, Request> 的形式，其中 Request 就是发送消息的请求 ProduceRequest，在发送消息之前 Sender 还会将请求保存到 ```Map<NodeId, Deque<Request>>``` 数据结构的 InFlightRequests 缓存已经发送请求但是没有收到响应的请求，通过 ```max.in.flight.requests.per.connection``` 控制与 broker 的每个连接最大允许未响应的请求数，默认是 5，如果较大则说明该 Node 负载较重或者网络连接有问题。
 
+通过 InFlightRequest 可以得到 broker 中负载最小的，即 InFlightRequest 中未确认请求数最少的 broker，称为 leastLoadedNode
+
 ### 元数据更新
 元数据是指 kafka 集群的元数据，这些元数据记录了集群中的主题、主题对应的分区、分区的 leader 和 follower 分配的节点等信息，当客户端没有需要使用的元数据信息时或者超过 ```metadata.max.age.ms```(默认 300000s 即 5 分钟) 没有更新元数据信息时会触发元数据的更新操作。
 
 生产者启动时由于 bootstrap.server 没有配置所有的 broker 节点，因此需要触发元数据更新操作，当分区数量发生变化或者分区 leader 副本发生变化时也会触发元数据更新操作。
 
-客户端需要更新元数据时，首先根据 InFlightRequests 获取负载最低的节点 leastLoadedNode(未确认请求最少的节点)，然后向这个节点发送 MetadataRequest 请求来获得元数据信息，更新操作是由 Sender 线程发起，在创建完 MetadataRequest 之后同样会存入 InFlightRequests。
+客户端的元数据更新是在内部完成的，对外不可见。客户端需要更新元数据时，首先根据 InFlightRequests 获取负载最低的节点 leastLoadedNode(未确认请求最少的节点)，然后向这个节点发送 MetadataRequest 请求来获得元数据信息，更新操作是由 Sender 线程发起，在创建完 MetadataRequest 之后同样会存入 InFlightRequests。
 
 
 ### 生产者重要参数
