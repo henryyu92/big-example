@@ -1,6 +1,9 @@
 package example;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerInterceptor;
+import org.apache.kafka.clients.consumer.ConsumerPartitionAssignor;
+import org.apache.kafka.clients.consumer.StickyAssignor;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerInterceptor;
 
@@ -13,6 +16,11 @@ public abstract class ConfigurationBuilder {
 
     public abstract Properties build();
 
+    /**
+     * 设置 broker 地址
+     * @param brokers
+     * @return
+     */
     public abstract ConfigurationBuilder brokers(String brokers);
 
     /**
@@ -113,27 +121,61 @@ public abstract class ConfigurationBuilder {
             properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupI);
         }
 
+        /**
+         * 设置 offset reset 方式
+         * @param autoOffsetReset
+         * @return
+         */
         public ConsumerConfigBuilder autoOffsetReset(AutoOffsetReset autoOffsetReset){
             if (autoOffsetReset == null){
                 properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, AutoOffsetReset.Latest.state);
+                return this;
             }
             properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset.state);
             return this;
         }
 
+        /**
+         * 设置消费者分区器
+         * @param assigner
+         * @return
+         */
+        public ConsumerConfigBuilder assigner(Class<? extends ConsumerPartitionAssignor> assigner){
+            if (assigner == null){
+                properties.setProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, StickyAssignor.class.getName());
+                return this;
+            }
+            properties.setProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, assigner.getName());
+            return this;
+        }
+
+        /**
+         * 设置消费者拦截器
+         * @param interceptor
+         * @param <K>
+         * @param <V>
+         * @return
+         */
+        public <K, V> ConsumerConfigBuilder interceptor(Class<? extends ConsumerInterceptor<K, V>> interceptor){
+            properties.setProperty(ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, interceptor.getName());
+            return this;
+        }
+
         @Override
         public Properties build() {
-            return null;
+            return properties;
         }
 
         @Override
         public ConsumerConfigBuilder id(String id) {
-            return null;
+            properties.setProperty(ConsumerConfig.CLIENT_ID_CONFIG, id);
+            return this;
         }
 
         @Override
         public ConsumerConfigBuilder brokers(String brokers) {
-            return null;
+            properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+            return this;
         }
     }
 

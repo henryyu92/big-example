@@ -11,6 +11,7 @@ import scala.sys.Prop;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
@@ -34,7 +35,7 @@ public class Main {
         // 初始化消费者实例
         KafkaConsumer<K, V> consumer = new KafkaConsumer<>(properties);
         // 订阅主题
-        consumer.subscribe(Arrays.asList(topic));
+        consumer.subscribe(Collections.singletonList(topic));
         try {
             while (isRunning) {
                 // 拉取消息
