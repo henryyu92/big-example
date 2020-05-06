@@ -4,43 +4,41 @@ package example.consumer.assigner;
 import org.apache.kafka.clients.consumer.internals.AbstractPartitionAssignor;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 随机分区器
+ * 同一消费组内实现广播消费，即消费组内的消费者可以消费同一个分区中的消息，但是不能消费同一个消息；消费组内广播需要考虑 offset 提交的问题
  */
-public class RandomAssigner extends AbstractPartitionAssignor {
+public class BroadcastPartitionAssigner extends AbstractPartitionAssignor {
     @Override
     public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsPerTopic, Map<String, Subscription> subscriptions) {
-        Map<String, List<String>> consumersPerTopic = consumersPerTopic(subscriptions);
+        Map<String, List<String>> consumerPerTopic = consumerPerTopic(subscriptions);
+        // 消费者分区分配
         Map<String, List<TopicPartition>> assignment = new HashMap<>();
-        for(String memberId : subscriptions.keySet()){
-            assignment.put(memberId, new ArrayList<>());
-        }
 
-        for(Map.Entry<String, List<String>> topicEntry : consumersPerTopic.entrySet()){
+        subscriptions.keySet().forEach(memberId ->assignment.put(memberId, new ArrayList<>()));
+
+        consumerPerTopic.entrySet().forEach(topicEntry->{
             String topic = topicEntry.getKey();
-            List<String> consumersForTopic = topicEntry.getValue();
-            int consumerSize = consumersForTopic.size();
-
+            List<String> members = topicEntry.getValue();
             Integer numPartitionsForTopic = partitionsPerTopic.get(topic);
-            if(numPartitionsForTopic == null){
-                continue;
+            if (numPartitionsForTopic == null || members.isEmpty()){
+                return;
             }
-
             List<TopicPartition> partitions = AbstractPartitionAssignor.partitions(topic, numPartitionsForTopic);
-            for(TopicPartition partition : partitions){
-                int rand = new Random().nextInt(consumerSize);
-                String randomConsumer = consumersForTopic.get(rand);
-                assignment.get(randomConsumer).add(partition);
+            if (!partitions.isEmpty()){
+                members.forEach(memberId -> assignment.get(memberId).addAll(partitions));
             }
-        }
+        });
         return assignment;
     }
 
     @Override
     public String name() {
-        return "random";
+        return "broadcast";
     }
 
     /**
@@ -48,7 +46,7 @@ public class RandomAssigner extends AbstractPartitionAssignor {
      * @param consumerMetadata
      * @return
      */
-    private Map<String, List<String>> consumersPerTopic(Map<String, Subscription> consumerMetadata){
+    private Map<String, List<String>> consumerPerTopic(Map<String, Subscription> consumerMetadata){
         Map<String, List<String>> res = new HashMap<>();
         for(Map.Entry<String, Subscription> subscriptionEntry : consumerMetadata.entrySet()){
             // 消费者 Id

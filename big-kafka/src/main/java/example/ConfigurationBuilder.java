@@ -34,8 +34,8 @@ public abstract class ConfigurationBuilder {
         return new ProducerConfigBuilder();
     }
 
-    public static ConsumerConfigBuilder newConsumerConfigBuilder(String brokers, String groupI){
-        return new ConsumerConfigBuilder(brokers, groupI);
+    public static ConsumerConfigBuilder newConsumerConfigBuilder(String brokers, String groupId){
+        return new ConsumerConfigBuilder(brokers, groupId);
     }
 
     /**

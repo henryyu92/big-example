@@ -7,10 +7,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,25 +25,20 @@ public class TtlInterceptor implements ConsumerInterceptor<String, String> {
     @Override
     public ConsumerRecords<String, String> onConsume(ConsumerRecords<String, String> records) {
         long now = System.currentTimeMillis();
-        Map<TopicPartition, List<ConsumerRecord<String, String>>> newRecords = new HashMap<>();
 
-        for(TopicPartition tp : records.partitions()){
-            List<ConsumerRecord<String, String>> tpRecords = records.records(tp);
-            List<ConsumerRecord<String, String>> newTpRecords = new ArrayList<>();
-            for(ConsumerRecord<String, String> record : tpRecords){
-                if (now - record.timestamp() < EXPIRE_INTERVAL){
-                    newTpRecords.add(record);
-                }
-            }
-            if (!newTpRecords.isEmpty()){
-                newRecords.put(tp, newTpRecords);
+        Iterator<ConsumerRecord<String, String>> it = records.iterator();
+        while (it.hasNext()){
+            ConsumerRecord<String, String> record = it.next();
+            if (now - record.timestamp() < EXPIRE_INTERVAL){
+                it.remove();
             }
         }
-        return new ConsumerRecords<>(newRecords);
+
+        return records;
     }
 
     /**
-     * 在提交完消费位移之后调用来记录跟踪提交的位移信息
+     * 在提交完 offset 之后调用来记录跟踪提交的位移信息，所有异常会被忽略
      * @param offsets
      */
     @Override

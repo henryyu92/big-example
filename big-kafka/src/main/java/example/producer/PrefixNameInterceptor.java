@@ -16,7 +16,7 @@ public class PrefixNameInterceptor implements ProducerInterceptor<String, String
     private AtomicLong sendFailure = new AtomicLong(0);
 
     /**
-     * 发送 Message 到 Broker 之前调用
+     * 发送 Message 到 Broker 之前调用，在 序列化器 以及 分区器 之前调用
      * @param record
      * @return
      */
