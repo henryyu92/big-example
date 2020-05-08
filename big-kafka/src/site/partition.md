@@ -1,3 +1,112 @@
+## 分区
+
+Kafka 中一个主题有多个分区，生产者向 broker 的主题发送消息时会根据 key 计算消息发送的分区，消费者 poll 消息时需要通过分区分配策略分配指定的分区。
+
+分区使用多副本机制提升可靠性，每个分区有多个副本，Kafka 保证同一个分区所有的副本分布在不同的节点上。Kafka 副本中只有 leader 副本可以对外提供读写服务，其他副本需要定时从 leader 副本拉取消息进行同步，当 leader 副本不可用时需要从其他副本上挑选一个新的 leader 副本对外提供服务。
+
+在创建主题时通过 ```--partition``` 参数指定主题的分区数，通过 ```--replica``` 参数指定每个分区的副本数：
+```
+```
+使用 ```kafka-topics.sh``` 脚本可以查看对应主题的分区和副本：
+```
+```
+
+### 分区副本
+
+Kafka 每个分区都有一个 leader 副本和多个 follower 副本，各个副本位于不同的 broker 节点上，其中 leader 副本对外提供读写服务，follower 副本只同步 leader 副本的数据。
+
+Kafka 在 ZK 上为每个分区维护了两个副本集合：AR(All Replica) 和 ISR(In-sync Replica)。AR 集合中包含分区的所有副本对应的节点 id，ISR 集合中包含与 leader 保持同步状态的副本的节点 id。当 leader 失效时，只有 ISR 集合中的 follower 副本才有可能被选举为新的 leader 副本。
+```
+```
+#### 失效副本
+follower 副本在同步数据时由于一些原因导致不能与 leader 副本保持同步状态，这种 follower 副本称为失效副本。失效副本可以使用 ```kafka-topics.sh``` 脚本的 ```--under-replicated-partitions``` 参数查看：
+```shell
+bin/kafka-topics.sh --zookeeper localhost:2181 \
+--describe topic-partitions \
+--under-replicated-partitions
+``` 
+
+follower 副本在同步 leader 副本数据时可能有快有慢，当数据同步较慢时可能会导致 follower 副本不能与 leader 副本保持同步状态，此时需要从 ISR 集合中去除该 follower 副本，当数据同步较快时可能会导致 follower 副本重新与 leader 副本保持同步状态，此时需要将该 follower 副本重新加入 ISR 集合。
+
+Kafka 在启动的时候创建了 ```isr-expiration``` 线程监控副本的同步状态 和 ```isr-change-propagation``` 线程同步 ISR 集合状态：
+```java
+// KafkaServer.startup()
+// replicaManager.startup()
+
+scheduler.schedule("isr-expiration", maybeShrinkIsr _, period = config.replicaLagTimeMaxMs / 2, unit = TimeUnit.MILLISECONDS)
+scheduler.schedule("isr-change-propagation", maybePropagateIsrChanges _, period = 2500L, unit = TimeUnit.MILLISECONDS)
+```
+
+
+
+### 副本
+副本是分布式系统中对数据和服务提供的一种冗余方式。数据副本是指在不同的节点上持久化同一份数据，当某个节点存储的数据丢失时可以从副本上读取该数据；服务副本指的是多个节点提供相同的服务，每个服务都有能力接收来自外部的请求并进行相应的处理。
+
+Kafka 为分区引入了多副本机制，通过增加副本数量来提升数据容灾能力实现故障自动转移：
+- 副本是相对分区而言的，即副本是特定分区的副本
+- 一个分区包含一个或多个副本，其中一个为 leader 副本，其他为 follower 副本，各个副本位于不同的 broker 节点中，只有 leader 副本可以对外提供服务，follower 副本负责同步数据
+- 分区中的所有副本的集合为 AR，与 leader 副本保持同步状态的副本集合为 ISR
+- LEO 表示每个分区中最后一条消息的下一个位置，分区中每个副本都有自己的 LEO，ISR 中最小的 LEO 即为 HW，消费者只能拉取到 HW 之前的消息
+#### 失效副本
+分区中在 ISR 集合之外的副本称为失效副本，失效副本对应的分区称为同步失效分区，即 under-replicated 分区，可以通过 ```kafka-topics.sh``` 脚本查看同步失效分区：
+```shell
+bin/kafka-topics.sh --zookeeper localhost:2181 \
+--describe topic-partitions --under-replicated-partitions
+``` 
+处于同步失效状态的副本也是失效副本，broker 端参数 ```replica.lag.time.max.ms``` 表示当 ISR 集合中的一个 follower 副本滞后 leader 副本的时间超过此参数指定值时则判定为同步失效需要将此副本移出 ISR 集合，默认值为 10000。
+
+当 follower 副本将 leader 副本 LEO(LogEndOffset) 之前的日志全部同步时则认为该 follower 副本已经追赶上 leader 副本，此时更新该副本的 lastCaughtUpTimeMs 标识。Kafka 的副本管理器会启动一个副本过期检测的定时任务，而这个定时任务会定时检测当前时间与副本的 lastCaughtUpTimeMs 差值是否大于参数 ```replica.lag.time.max.ms``` 指定的值。
+
+导致副本失效的情况：
+- follower 脚本进程卡住，在一段时间内根本没有向 leader 副本发起同步请求，比如频繁的 Full GC
+- follower 副本进程同步过慢，在一段时间内都无法追赶上 leader 副本，比如 I/O 开销过大
+#### ISR 的伸缩
+Kafka 在启动的时候会开启两个与 ISR 相关的定时任务：isr-expiration 和 isr-change-propagation。isr-expiration 任务会周期性地检测么个分区是否需要缩减其 ISR 集合，这个周期是 replica.lag.time.max.ms 参数值得一半，当任务检测到 ISR 集合中有失效副本时就会收缩 ISR 集合。如果某个分区的 ISR 集合发生变更，则将变更后的数据记录到 ZooKeeper 对应的 /brokers/topics/<topic>/partition<paritition>/state 节点中：
+- controller_epoch 表示当前 Kafka 控制器的 epoch
+- leader 表示当前分区的 leader 副本所在的 broker 
+- version 表示版本信息
+- leader_epoch 表示当前分区的 leader epoch
+- isr 表示变更后的 ISR 集合
+
+当 ISR 集合发生变更时还会将变更后的记录缓存到 isrChangeSet 中，isr-chagne-propagation 任务会周期性(固定为 2500ms)检查 isrChangeSet 如果发现 isrChangeSet 中有 ISR 集合的变更记录则会在 ZooKeeper 的 /isr_change_notification 路径下创建 isr_change_ 开头的持久顺序节点并将 isrChangeSet 中的数据保存到这个节点。
+
+Kafka 控制器为 /isr_change_notification 添加了一个 Watcher，当有子节点发生变化时会触发 Watcher 以此通知控制器更新相关元数据信息并向它管理的 broker 节点发送更新元数据的请求，最后删除 /isr_change_notification 节点下已经处理过的节点
+
+当检测到分区的 ISR 集合发生变化时，需要满足两个条件之一才能触发元数据的变更：
+- 上一次 ISR 集合发生变化距离现在已经超过 5s
+- 上一次写入 ZooKeeper 的时间距离现在已经超过 60s
+
+当 follower 的 LEO 追赶上 leader 副本之后就可以进入 ISR 集合，追赶上的判定标准是此副本的 LEO 不小于 leader 副本的 HW，ISR 扩充之后同样会更新 ZooKeeper 中的 /brokers/topics/<topic>/paritition/<partition>/state 节点和 isrChangeSet
+
+当 ISR 集合发生增减时或者 ISR 集合中的任一副本的 LEO 发生变化时都可能影响整个分区的 HW，分区的 HW 为 ISR 集合中副本最小的 LEO
+
+#### LEO 和 HW
+副本有两个概念：
+- 本地副本(Local Replica)：对应的 Log 分配在当前的 broker 节点上
+- 远程副本(Remote Replica)：对应的 Log 分配在其他的 broker 节点上
+
+Kafka 中同一个分区的信息会存在多个 broker 节点上并被其上的副本管理器所管理，这样在逻辑层面每个 broker 节点上的分区就有了多个副本，但是只有本地副本才有对应的日志。消息追加的过程如下：
+- 生产者客户端发送消息至 leader 副本
+- 消息呗追加到 leader 副本的本地日志，并且会更新日志的偏移量
+- follower 副本向 leader 副本请求同步数据
+- leader 副本所在的服务器读取本地日志，并更新对应拉取的 follower 副本的信息
+- leader 副本所在的服务器将拉取结果返回给 follower 副本
+- follower 副本收到 leader 副本返回结果，将消息追加到本地日志中，并更新日志的偏移量
+
+在一个分区中，leader 副本所在的节点会记录所有副本的 LEO，而 follower 副本所在的节点只会记录自身的 LEO；对于 HW 而言，各个副本所在的节点都只记录它自身的 HW。leader 副本收到其他 follower 副本的 FetchRequest 请求之后，首先会从自己的日志文件中读取数据，然后在返回给 follower 副本数据前先更新 follower 副本的 LEO。
+
+recovery-point-offset-checkpoint 和 replication-offset-checkpoint 这两个文件分别对应了 LEO 和 HW。Kafka 中会有一个定时任务负责将所有分区的 LEO 刷写到回复点文件 recovery-point-offset-checkpoint 中，定时周期由 broker 端参数 log.flush.offset.checkpoint.interval.ms 配置，默认 60000。还有一个定时任务负责将所有分区的 HW 刷写到复制点文件 replication-offset-checkpoint 中，定时周期由 broker 端参数 replica.high.watermark.checkpoint.interval.ms 配置，默认 5000。
+
+log-start-offset-checkpoint 文件对应 logStartOffset，各个副本在变动 LEO 和 HW 的过程中，logStartOffset 也有可能随之而动，Kafka 有一个定时任务来负责将所有分区中的 logStartOffset 刷写到起始点文件 log-start-offset-checkpoint 中，定时周期由 broker 端参数 log.flush.start.offset.checkpoint.interval.ms 配置， 默认 60000
+
+#### Leader Epoch
+
+
+### 分区副本分配
+
+
+### Leader 副本选举
+
 ### 分区管理
 分区使用多副本机制来提升可靠性，但只有 leader 副本可以对外提供读写服务而 follower 副本只负责同步 leader 的消息，如果分区的 leader 副本不可用则需要 Kafka 从剩余的 follower 副本挑选一个新的 leader 副本对外提供服务。
 
@@ -193,64 +302,4 @@ public class TopicManager {
 }
 ```
 
-### 副本
-副本是分布式系统中对数据和服务提供的一种冗余方式。数据副本是指在不同的节点上持久化同一份数据，当某个节点存储的数据丢失时可以从副本上读取该数据；服务副本指的是多个节点提供相同的服务，每个服务都有能力接收来自外部的请求并进行相应的处理。
 
-Kafka 为分区引入了多副本机制，通过增加副本数量来提升数据容灾能力实现故障自动转移：
-- 副本是相对分区而言的，即副本是特定分区的副本
-- 一个分区包含一个或多个副本，其中一个为 leader 副本，其他为 follower 副本，各个副本位于不同的 broker 节点中，只有 leader 副本可以对外提供服务，follower 副本负责同步数据
-- 分区中的所有副本的集合为 AR，与 leader 副本保持同步状态的副本集合为 ISR
-- LEO 表示每个分区中最后一条消息的下一个位置，分区中每个副本都有自己的 LEO，ISR 中最小的 LEO 即为 HW，消费者只能拉取到 HW 之前的消息
-#### 失效副本
-分区中在 ISR 集合之外的副本称为失效副本，失效副本对应的分区称为同步失效分区，即 under-replicated 分区，可以通过 ```kafka-topics.sh``` 脚本查看同步失效分区：
-```shell
-bin/kafka-topics.sh --zookeeper localhost:2181 \
---describe topic-partitions --under-replicated-partitions
-``` 
-处于同步失效状态的副本也是失效副本，broker 端参数 ```replica.lag.time.max.ms``` 表示当 ISR 集合中的一个 follower 副本滞后 leader 副本的时间超过此参数指定值时则判定为同步失效需要将此副本移出 ISR 集合，默认值为 10000。
-
-当 follower 副本将 leader 副本 LEO(LogEndOffset) 之前的日志全部同步时则认为该 follower 副本已经追赶上 leader 副本，此时更新该副本的 lastCaughtUpTimeMs 标识。Kafka 的副本管理器会启动一个副本过期检测的定时任务，而这个定时任务会定时检测当前时间与副本的 lastCaughtUpTimeMs 差值是否大于参数 ```replica.lag.time.max.ms``` 指定的值。
-
-导致副本失效的情况：
-- follower 脚本进程卡住，在一段时间内根本没有向 leader 副本发起同步请求，比如频繁的 Full GC
-- follower 副本进程同步过慢，在一段时间内都无法追赶上 leader 副本，比如 I/O 开销过大
-#### ISR 的伸缩
-Kafka 在启动的时候会开启两个与 ISR 相关的定时任务：isr-expiration 和 isr-change-propagation。isr-expiration 任务会周期性地检测么个分区是否需要缩减其 ISR 集合，这个周期是 replica.lag.time.max.ms 参数值得一半，当任务检测到 ISR 集合中有失效副本时就会收缩 ISR 集合。如果某个分区的 ISR 集合发生变更，则将变更后的数据记录到 ZooKeeper 对应的 /brokers/topics/<topic>/partition<paritition>/state 节点中：
-- controller_epoch 表示当前 Kafka 控制器的 epoch
-- leader 表示当前分区的 leader 副本所在的 broker 
-- version 表示版本信息
-- leader_epoch 表示当前分区的 leader epoch
-- isr 表示变更后的 ISR 集合
-
-当 ISR 集合发生变更时还会将变更后的记录缓存到 isrChangeSet 中，isr-chagne-propagation 任务会周期性(固定为 2500ms)检查 isrChangeSet 如果发现 isrChangeSet 中有 ISR 集合的变更记录则会在 ZooKeeper 的 /isr_change_notification 路径下创建 isr_change_ 开头的持久顺序节点并将 isrChangeSet 中的数据保存到这个节点。
-
-Kafka 控制器为 /isr_change_notification 添加了一个 Watcher，当有子节点发生变化时会触发 Watcher 以此通知控制器更新相关元数据信息并向它管理的 broker 节点发送更新元数据的请求，最后删除 /isr_change_notification 节点下已经处理过的节点
-
-当检测到分区的 ISR 集合发生变化时，需要满足两个条件之一才能触发元数据的变更：
-- 上一次 ISR 集合发生变化距离现在已经超过 5s
-- 上一次写入 ZooKeeper 的时间距离现在已经超过 60s
-
-当 follower 的 LEO 追赶上 leader 副本之后就可以进入 ISR 集合，追赶上的判定标准是此副本的 LEO 不小于 leader 副本的 HW，ISR 扩充之后同样会更新 ZooKeeper 中的 /brokers/topics/<topic>/paritition/<partition>/state 节点和 isrChangeSet
-
-当 ISR 集合发生增减时或者 ISR 集合中的任一副本的 LEO 发生变化时都可能影响整个分区的 HW，分区的 HW 为 ISR 集合中副本最小的 LEO
-
-#### LEO 和 HW
-副本有两个概念：
-- 本地副本(Local Replica)：对应的 Log 分配在当前的 broker 节点上
-- 远程副本(Remote Replica)：对应的 Log 分配在其他的 broker 节点上
-
-Kafka 中同一个分区的信息会存在多个 broker 节点上并被其上的副本管理器所管理，这样在逻辑层面每个 broker 节点上的分区就有了多个副本，但是只有本地副本才有对应的日志。消息追加的过程如下：
-- 生产者客户端发送消息至 leader 副本
-- 消息呗追加到 leader 副本的本地日志，并且会更新日志的偏移量
-- follower 副本向 leader 副本请求同步数据
-- leader 副本所在的服务器读取本地日志，并更新对应拉取的 follower 副本的信息
-- leader 副本所在的服务器将拉取结果返回给 follower 副本
-- follower 副本收到 leader 副本返回结果，将消息追加到本地日志中，并更新日志的偏移量
-
-在一个分区中，leader 副本所在的节点会记录所有副本的 LEO，而 follower 副本所在的节点只会记录自身的 LEO；对于 HW 而言，各个副本所在的节点都只记录它自身的 HW。leader 副本收到其他 follower 副本的 FetchRequest 请求之后，首先会从自己的日志文件中读取数据，然后在返回给 follower 副本数据前先更新 follower 副本的 LEO。
-
-recovery-point-offset-checkpoint 和 replication-offset-checkpoint 这两个文件分别对应了 LEO 和 HW。Kafka 中会有一个定时任务负责将所有分区的 LEO 刷写到回复点文件 recovery-point-offset-checkpoint 中，定时周期由 broker 端参数 log.flush.offset.checkpoint.interval.ms 配置，默认 60000。还有一个定时任务负责将所有分区的 HW 刷写到复制点文件 replication-offset-checkpoint 中，定时周期由 broker 端参数 replica.high.watermark.checkpoint.interval.ms 配置，默认 5000。
-
-log-start-offset-checkpoint 文件对应 logStartOffset，各个副本在变动 LEO 和 HW 的过程中，logStartOffset 也有可能随之而动，Kafka 有一个定时任务来负责将所有分区中的 logStartOffset 刷写到起始点文件 log-start-offset-checkpoint 中，定时周期由 broker 端参数 log.flush.start.offset.checkpoint.interval.ms 配置， 默认 60000
-
-#### Leader Epoch
