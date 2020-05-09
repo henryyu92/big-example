@@ -1,67 +1,67 @@
-## 分区
+## 副本同步
 
-Kafka 中一个主题有多个分区，生产者向 broker 的主题发送消息时会根据 key 计算消息发送的分区，消费者 poll 消息时需要通过分区分配策略分配指定的分区。
+Kafka 主题中的每个分区都有一个预写日志（write-ahead log），写入 Kafka 的消息就存储在预写日志中。每条消息都有一个唯一的偏移量，用于标识它在当前分区日志中的位置。
 
 分区使用多副本机制提升可靠性，每个分区有多个副本，Kafka 保证同一个分区所有的副本分布在不同的节点上。Kafka 副本中只有 leader 副本可以对外提供读写服务，其他副本需要定时从 leader 副本拉取消息进行同步，当 leader 副本不可用时需要从其他副本上挑选一个新的 leader 副本对外提供服务。
 
-在创建主题时通过 ```--partition``` 参数指定主题的分区数，通过 ```--replica``` 参数指定每个分区的副本数：
-```
-```
-使用 ```kafka-topics.sh``` 脚本可以查看对应主题的分区和副本：
-```
+Kafka 分区中的所有副本所在的集合为 AR(Assigned Replica)，和 leader 副本保持同步状态的 follower 副本集合为 ISR(In-sync Replica)，没有和 leader 副本保持同步的 follower 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR。
+
+分区中每个副本都有 LEO(LogEndOffset) 表示副本中最有一条消息的下一个 offset。ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息。消息写入 leader 副本后，需要等到 ISR 集合中所有的 follower 副本同步数据然后更新各自的 HW 之后才能被消费者拉取到。
+
 ```
 
-### 分区副本
-
-Kafka 每个分区都有一个 leader 副本和多个 follower 副本，各个副本位于不同的 broker 节点上，其中 leader 副本对外提供读写服务，follower 副本只同步 leader 副本的数据。
-
-Kafka 在 ZK 上为每个分区维护了两个副本集合：AR(All Replica) 和 ISR(In-sync Replica)。AR 集合中包含分区的所有副本对应的节点 id，ISR 集合中包含与 leader 保持同步状态的副本的节点 id。当 leader 失效时，只有 ISR 集合中的 follower 副本才有可能被选举为新的 leader 副本。
 ```
-```
-#### 失效副本
-follower 副本在同步数据时由于一些原因导致不能与 leader 副本保持同步状态，这种 follower 副本称为失效副本。失效副本可以使用 ```kafka-topics.sh``` 脚本的 ```--under-replicated-partitions``` 参数查看：
-```shell
-bin/kafka-topics.sh --zookeeper localhost:2181 \
---describe topic-partitions \
---under-replicated-partitions
-``` 
 
-follower 副本在同步 leader 副本数据时可能有快有慢，当数据同步较慢时可能会导致 follower 副本不能与 leader 副本保持同步状态，此时需要从 ISR 集合中去除该 follower 副本，当数据同步较快时可能会导致 follower 副本重新与 leader 副本保持同步状态，此时需要将该 follower 副本重新加入 ISR 集合。
+### ISR 伸缩
 
-Kafka 在启动的时候创建了 ```isr-expiration``` 线程监控副本的同步状态 和 ```isr-change-propagation``` 线程同步 ISR 集合状态：
+当 follower 副本不能与 leader 副本保持同步状态或者 follower 副本节点失效时，就会被移出 ISR 集合；当 follower 副本再次与 leader 副本保持同步状态时就会再次加入 ISR 集合中。
+
+Kafka 在启动的时候在 ```ReplicaManager#startup``` 中创建了 ```isr-expiration``` 线程监控 follower 副本的同步状态，该线程会周期性的检查是否需要收缩 ISR 集合，周期为 ```replica.lag.time.max.ms /2 ```:
 ```java
-// KafkaServer.startup()
-// replicaManager.startup()
-
 scheduler.schedule("isr-expiration", maybeShrinkIsr _, period = config.replicaLagTimeMaxMs / 2, unit = TimeUnit.MILLISECONDS)
-scheduler.schedule("isr-change-propagation", maybePropagateIsrChanges _, period = 2500L, unit = TimeUnit.MILLISECONDS)
+```
+```maybeShrinkIsr``` 中遍历节点在线的分区，然后对每个分区检查是否需要收缩 ISR 集合：
+```java
+private def maybeShrinkIsr(): Unit = {
+  trace("Evaluating ISR list of partitions to see which replicas can be removed from the ISR")
+
+  // Shrink ISRs for non offline partitions
+  allPartitions.keys.foreach { topicPartition =>
+    nonOfflinePartition(topicPartition).foreach(_.maybeShrinkIsr(config.replicaLagTimeMaxMs))
+}
+}
+```
+```maybeShrinkIsr``` 方法是分区判断是否需要收缩 ISR 集合的实现，ISR 是否需要收缩的检查是在 leader 副本上完成的，当前节点的分区副本如果不是 leader 副本则直接返回 false。当 follower 副本的 LEO 不等于 leader 副本的 LEO 并且 follower 副本上次与 leader 副本同步的时间(lastCaughtUpTimeMs) 和当前时间间隔大于 ```replica.lag.time.max.ms``` 则表示当前 follower 副本不能与 leader 副本同步，需要被移出 ISR 集合，默认值是 10000 ms。
+```java
+def getOutOfSyncReplicas(maxLagMs: Long): Set[Int] = {
+  // ISR 集合去除当前 leader 副本
+  val candidateReplicaIds = inSyncReplicaIds - localBrokerId
+  val currentTimeMs = time.milliseconds()
+  val leaderEndOffset = localLogOrException.logEndOffset
+  candidateReplicaIds.filter(replicaId => isFollowerOutOfSync(replicaId, leaderEndOffset, currentTimeMs, maxLagMs))
+}
+
+private def isFollowerOutOfSync(replicaId: Int,
+                                leaderEndOffset: Long,
+                                currentTimeMs: Long,
+                                maxLagMs: Long): Boolean = {
+  val followerReplica = getReplicaOrException(replicaId)
+  // 判断 follower 副本不在 ISR 集合
+  followerReplica.logEndOffset != leaderEndOffset &&
+    (currentTimeMs - followerReplica.lastCaughtUpTimeMs) > maxLagMs
+}
+```
+
+副本同步异常导致被移出 ISR 一般有三种情况：
+- follower 同步较慢，在一段时间内都无法追赶上 leader 副本。常见原因是 I/O 瓶颈导致 follower 追加复制消息速度比从 leader 拉取速度慢
+- follower 进程卡住，在一段时间内根本没有向 leader 副本发起同步请求。一般是由于 follower 进程 GC 或者 follower 失效
+- 新启动的 follower 副本，新增的 follower 副本在完全赶上 leader 副本之前不在 ISR 中
+
+```isr-expiration``` 线程从 ISR 集合中去除不能与 leader 副本同步的 follower 副本之后，将新的副本以及 leader 副本数据记录到 ZK 上 ```brokers/topics/<topic>/paritition/state 节点中：
 ```
 
 
-
-### 副本
-副本是分布式系统中对数据和服务提供的一种冗余方式。数据副本是指在不同的节点上持久化同一份数据，当某个节点存储的数据丢失时可以从副本上读取该数据；服务副本指的是多个节点提供相同的服务，每个服务都有能力接收来自外部的请求并进行相应的处理。
-
-Kafka 为分区引入了多副本机制，通过增加副本数量来提升数据容灾能力实现故障自动转移：
-- 副本是相对分区而言的，即副本是特定分区的副本
-- 一个分区包含一个或多个副本，其中一个为 leader 副本，其他为 follower 副本，各个副本位于不同的 broker 节点中，只有 leader 副本可以对外提供服务，follower 副本负责同步数据
-- 分区中的所有副本的集合为 AR，与 leader 副本保持同步状态的副本集合为 ISR
-- LEO 表示每个分区中最后一条消息的下一个位置，分区中每个副本都有自己的 LEO，ISR 中最小的 LEO 即为 HW，消费者只能拉取到 HW 之前的消息
-#### 失效副本
-分区中在 ISR 集合之外的副本称为失效副本，失效副本对应的分区称为同步失效分区，即 under-replicated 分区，可以通过 ```kafka-topics.sh``` 脚本查看同步失效分区：
-```shell
-bin/kafka-topics.sh --zookeeper localhost:2181 \
---describe topic-partitions --under-replicated-partitions
-``` 
-处于同步失效状态的副本也是失效副本，broker 端参数 ```replica.lag.time.max.ms``` 表示当 ISR 集合中的一个 follower 副本滞后 leader 副本的时间超过此参数指定值时则判定为同步失效需要将此副本移出 ISR 集合，默认值为 10000。
-
-当 follower 副本将 leader 副本 LEO(LogEndOffset) 之前的日志全部同步时则认为该 follower 副本已经追赶上 leader 副本，此时更新该副本的 lastCaughtUpTimeMs 标识。Kafka 的副本管理器会启动一个副本过期检测的定时任务，而这个定时任务会定时检测当前时间与副本的 lastCaughtUpTimeMs 差值是否大于参数 ```replica.lag.time.max.ms``` 指定的值。
-
-导致副本失效的情况：
-- follower 脚本进程卡住，在一段时间内根本没有向 leader 副本发起同步请求，比如频繁的 Full GC
-- follower 副本进程同步过慢，在一段时间内都无法追赶上 leader 副本，比如 I/O 开销过大
-#### ISR 的伸缩
-Kafka 在启动的时候会开启两个与 ISR 相关的定时任务：isr-expiration 和 isr-change-propagation。isr-expiration 任务会周期性地检测么个分区是否需要缩减其 ISR 集合，这个周期是 replica.lag.time.max.ms 参数值得一半，当任务检测到 ISR 集合中有失效副本时就会收缩 ISR 集合。如果某个分区的 ISR 集合发生变更，则将变更后的数据记录到 ZooKeeper 对应的 /brokers/topics/<topic>/partition<paritition>/state 节点中：
+```
 - controller_epoch 表示当前 Kafka 控制器的 epoch
 - leader 表示当前分区的 leader 副本所在的 broker 
 - version 表示版本信息
@@ -80,6 +80,11 @@ Kafka 控制器为 /isr_change_notification 添加了一个 Watcher，当有子�
 
 当 ISR 集合发生增减时或者 ISR 集合中的任一副本的 LEO 发生变化时都可能影响整个分区的 HW，分区的 HW 为 ISR 集合中副本最小的 LEO
 
+#### 数据拉取
+
+follower 副本向 leader 副本拉取数据的细节在 ```ReplicaManager#makeFollower``` 中。
+
+https://www.jianshu.com/p/f9a825c0087a
 #### LEO 和 HW
 副本有两个概念：
 - 本地副本(Local Replica)：对应的 Log 分配在当前的 broker 节点上
