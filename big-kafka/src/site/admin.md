@@ -1,19 +1,22 @@
-### 主题管理
-主题管理包括创建、查看、修改、删除主题等操作，Kafka 的主题操作通过 Kafka 提供的 kafka-topics.sh 脚本执行，该脚本位于 $KAFKA_HOME/bin 目录下，其本质是调用 ```kafka.admin.TopicCommand``` 类来执行主题的管理操作。
-#### 创建主题
+
+## 主题管理
+
+主题管理包括创建、查看、修改、删除主题等操作，Kafka 的主题操作通过 ```$KAFKA_HOME/binkafka-topics.sh``` 脚本执行，其本质是调用 ```kafka.admin.TopicCommand``` 类来执行主题的管理操作。
+
+### 创建主题
 如果 broker 配置参数 ```auto.create.topics.enable``` 设置为 true(默认)，那么当生产者向一个尚未创建的主题发送消息时会自动创建一个分区数为 ```num.partitions``` (默认为 1)、副本因子为 ```default.replication.facotr``` (默认为 1) 的主题，另外当消费者开始从未知主题中读取消息时或者任意一个客户端向未知主题发送元数据请求时都会按照配置参数的值创建一个相应的主题。不建议将 ```auto.create.topics.enable``` 设置为 true，因为这会增加主题管理与维护的难度。
 
 使用 ```kafka-topics.sh``` 脚本来创建主题是更通用的方式：
 ```shell
-# --zookeeper 指定 ZooKeeper 连接地址
 # --create 表示创建主题
+# --bootstrap-server 指定 broker 的地址
 # --topic 指定创建的主题名称
 # --partitions 指定主题的分区数
 # --replication-facotr 指定分区的副本因子，副本的数量不能多于 broker 的数量
 
 bin/kafka-topics.sh \
---zookeeper localhost:2181 \
 --create \
+--bootstrap-server localhost:9092 \
 --topic topic-create \
 --partitions 4 \
 --replication-factor 2 \
@@ -25,7 +28,7 @@ get /brokers/topics/topic-create
 # "2":[1,2] 表示分区号为 2 的副本分布在 brokerId 为 1 和 2 的 broker 上
 {"version":"1", "partitions":{"2":[1,2], "1":[0,1],"3":[2,1],"0":[2,0]}}
 ```
-还可以通过 ```kafka-topics.sh``` 脚本的 describe 指令来查看分区副本的分配细节：
+通过 ```kafka-topics.sh``` 脚本的 describe 指令可以查看分区副本的分配细节：
 ```shell
 bin/kafka-topics.sh \
 --zookeeper localhost:2181 \
@@ -101,14 +104,14 @@ bin/kafka-topics.sh --zookeeper localhost:2181 --describe --under-replicated-par
 bin/kafka-topics.sh --zookeeper localhost:2181 --describe --unavailable-partitions
 ```
 #### 修改主题
-```kafka-topics.sh``` 脚本的 alter 指令可以修改已经创建的主题，Kafka 只支持增加分区而不支持减少分区，原因在于如果减少分区则减少的分区数据处理将会变得非常麻烦。当修改一个不存在的 topic 时，使用 --if-exists 参数来忽略修改：
+```kafka-topics.sh``` 脚本的 alter 指令可以修改已经创建的主题，Kafka 只支持增加分区而不支持减少分区。当修改一个不存在的 topic 时，使用 --if-exists 参数来忽略修改：
 ```shell
 bin/kafka-topics --zookeeper localhost:2181 \
 --alter \
+--if-exists \
 --topic topic-config \
 # 修改分区数
---partitions 3 \
---if-exists
+--partitions 3
 ```
 主题的修改特别是分区的修改会使得原有的数据受到很大的影响，如 producer 端根据 key 计算分区，消息的有序性、事务等变得很难保证，因此一般不建议修改分区。
 #### 删除主题
@@ -150,6 +153,8 @@ rm -rf /<log.dir>/topic_delete
 |min.compaction.lag.ms||||
 |min.insync.replicas||||
 |preallocate||||
+
+### 分区管理
 
 ### 配置管理
 ```kafka-configs.sh``` 脚本是专门用来对配置进行操作的，也就是在运行状态下修改原有的配置达到动态变更的目的。脚本包含变更配置 alter 和查看配置 describe 这两种指令类型，支持主题、broker、用户和客户端的配置。
@@ -230,4 +235,48 @@ bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 ```shell
 bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 --delete --group groupIdMonitor
+```
+
+### KafkaAdminClient
+KafkaAdminClient 提供了 API 的方式对 Kafka 的主题、brokers、配置和 ACL 的管理：
+```java
+public class TopicManager {
+
+    private static final String broker = "localhost:9092";
+    private static final String topic = "topic-admin";
+
+    public static Properties initConfig(){
+        Properties props = new Properties();
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
+        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
+        return props;
+    }
+
+    public static void main(String[] args) {
+        Properties props = initConfig();
+        AdminClient admin = AdminClient.create(props);
+        NewTopic newTopic = new NewTopic(topic, 4, (short) 1);
+		// 创建 Topic
+        CreateTopicsResult topicsResult = admin.createTopics(Collections.singleton(newTopic));
+		// 查看 topic 配置信息
+        ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+        DescribeConfigsResult configsResult = admin.describeConfigs(Collections.singleton(resource));
+		
+		// 修改 topic 配置信息
+        Map<ConfigResource, Config> configs = new HashMap<>();
+        ConfigEntry configEntry = new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT);
+        configs.put(resource, new Config(Collections.singleton(configEntry)));
+        AlterConfigsResult alterConfigsResult = admin.alterConfigs(configs);
+        try{
+			// 获取异步结果
+            topicsResult.all().get();
+            Config config = configsResult.all().get().get(resource);
+            System.out.println(config);
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            admin.close();
+        }
+    }
+}
 ```

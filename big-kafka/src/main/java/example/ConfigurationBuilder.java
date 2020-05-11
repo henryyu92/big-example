@@ -1,5 +1,6 @@
 package example;
 
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;
 import org.apache.kafka.clients.consumer.ConsumerPartitionAssignor;
@@ -36,6 +37,10 @@ public abstract class ConfigurationBuilder {
 
     public static ConsumerConfigBuilder newConsumerConfigBuilder(String brokers, String groupId){
         return new ConsumerConfigBuilder(brokers, groupId);
+    }
+
+    public static AdminConfigBuilder newAdminConfigBuilder(String brokers){
+        return new AdminConfigBuilder(brokers);
     }
 
     /**
@@ -176,6 +181,32 @@ public abstract class ConfigurationBuilder {
         public ConsumerConfigBuilder brokers(String brokers) {
             properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
             return this;
+        }
+    }
+
+
+    public static class AdminConfigBuilder extends ConfigurationBuilder{
+
+        Properties properties;
+
+        AdminConfigBuilder(String brokers){
+            properties.setProperty(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+        }
+
+        @Override
+        public Properties build() {
+            return properties;
+        }
+
+        @Override
+        public AdminConfigBuilder brokers(String brokers) {
+            properties.setProperty(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+            return this;
+        }
+
+        @Override
+        public AdminConfigBuilder id(String id) {
+            return null;
         }
     }
 

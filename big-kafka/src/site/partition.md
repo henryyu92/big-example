@@ -28,7 +28,7 @@ private def maybeShrinkIsr(): Unit = {
   // Shrink ISRs for non offline partitions
   allPartitions.keys.foreach { topicPartition =>
     nonOfflinePartition(topicPartition).foreach(_.maybeShrinkIsr(config.replicaLagTimeMaxMs))
-}
+  }
 }
 ```
 ```maybeShrinkIsr``` 方法是分区判断是否需要收缩 ISR 集合的实现，ISR 是否需要收缩的检查是在 leader 副本上完成的，当前节点的分区副本如果不是 leader 副本则直接返回 false。当 follower 副本的 LEO 不等于 leader 副本的 LEO 并且 follower 副本上次与 leader 副本同步的时间(lastCaughtUpTimeMs) 和当前时间间隔大于 ```replica.lag.time.max.ms``` 则表示当前 follower 副本不能与 leader 副本同步，需要被移出 ISR 集合，默认值是 10000 ms。
@@ -57,7 +57,7 @@ private def isFollowerOutOfSync(replicaId: Int,
 - follower 进程卡住，在一段时间内根本没有向 leader 副本发起同步请求。一般是由于 follower 进程 GC 或者 follower 失效
 - 新启动的 follower 副本，新增的 follower 副本在完全赶上 leader 副本之前不在 ISR 中
 
-```isr-expiration``` 线程从 ISR 集合中去除不能与 leader 副本同步的 follower 副本之后，将新的副本以及 leader 副本数据记录到 ZK 上 ```brokers/topics/<topic>/paritition/state 节点中：
+```isr-expiration``` 线程从 ISR 集合中去除不能与 leader 副本同步的 follower 副本之后，将新的副本以及 leader 副本数据记录到 ZK 上 ```brokers/topics/<topic>/<paritition>/state 节点中：
 ```
 
 
@@ -263,48 +263,6 @@ bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 --execute --reassignment-json-file add.json
 ```
-### KafkaAdminClient
-KafkaAdminClient 提供了 API 的方式对 Kafka 的主题、brokers、配置和 ACL 的管理：
-```java
-public class TopicManager {
 
-    private static final String broker = "localhost:9092";
-    private static final String topic = "topic-admin";
-
-    public static Properties initConfig(){
-        Properties props = new Properties();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
-        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
-        return props;
-    }
-
-    public static void main(String[] args) {
-        Properties props = initConfig();
-        AdminClient admin = AdminClient.create(props);
-        NewTopic newTopic = new NewTopic(topic, 4, (short) 1);
-		// 创建 Topic
-        CreateTopicsResult topicsResult = admin.createTopics(Collections.singleton(newTopic));
-		// 查看 topic 配置信息
-        ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
-        DescribeConfigsResult configsResult = admin.describeConfigs(Collections.singleton(resource));
-		
-		// 修改 topic 配置信息
-        Map<ConfigResource, Config> configs = new HashMap<>();
-        ConfigEntry configEntry = new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT);
-        configs.put(resource, new Config(Collections.singleton(configEntry)));
-        AlterConfigsResult alterConfigsResult = admin.alterConfigs(configs);
-        try{
-			// 获取异步结果
-            topicsResult.all().get();
-            Config config = configsResult.all().get().get(resource);
-            System.out.println(config);
-        }catch (Exception e){
-            e.printStackTrace();
-        }finally {
-            admin.close();
-        }
-    }
-}
-```
 
 
