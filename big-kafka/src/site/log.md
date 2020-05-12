@@ -14,7 +14,7 @@ broker 上的日志文件以及索引文件都是以基准偏移量(base offset)
 
 Log 是 kafka 日志的抽象，生产者向 broker 发送的消息是以 Log 的形式存储到文件中。Log 是一个 LogSegment 序列，每个 LogSegment 都有一个基准偏移量(base offset) 表示当前 LogSegment 中第一条消息的 offset。
 
-
+Kafka 中消息不是一条一条的追加到日志文件中，而是以 ```RecordBatch``` 为单元追加的。消息在日志文件中是以二进制的形式存储的，
 
 
 
@@ -233,13 +233,64 @@ private def deleteRetentionMsBreachedSegments(): Int = {
 ```
 如果通过计算发现所有的 LogSegment 都已经过期，则需要先切分出一个新的 LogSegment 用于接收消息写入，然后再对 LogSegment 执行删除操作。
 
-```deleteRetentionSizeBreachedSegments``` 方法用于清理日志文件超过设定阈值大小(retentionSize)的日志，阈值大小通过参数 ```retention.bytes``` 设置，默认值为 -1 表示无穷大。
+```deleteRetentionSizeBreachedSegments``` 方法用于清理超过一定大小的日志。该算法首先计算 Log 的总大小和阈值的差值 diff，阈值通过参数 ```retention.bytes``` 设置，默认值为 -1 表示无穷大。如果差值 diff 大于 0，则从第一个 LogSegment 开始找出需要清理的 LogSegment。
+```java
+private def deleteRetentionSizeBreachedSegments(): Int = {
+  if (config.retentionSize < 0 || size < config.retentionSize) return 0
+    // 计算 Log 总大小和 retensionSize 的差值
+    var diff = size - config.retentionSize
+    def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) = {
+      // 如果 LogSegment 大小小于差值则需要清理
+      if (diff - segment.size >= 0) {
+        diff -= segment.size
+        true
+      } else {
+        false
+      }
+    }
 
-日志删除任务会检查当前日志的大小是否超过设定的阈值(retentionSize)来寻找可删除的日志分段的文件集合(deletableSegments)。阈值大小可以通过 broker 端参数 ```log.retention.bytes``` 来配置，默认 -1 表示无穷大，该参数配置的所有日志分段文件的总大小而不是单个日志分段的大小，单个日志分段的大小由参数 ```log.segment.bytes``` 来控制，默认 173741824(1GB)。
+    deleteOldSegments(shouldDelete, reason = s"retention size in bytes ${config.retentionSize} breach")
+}
+```
+```deleteLogStartOffsetBreachedSegments``` 方法用于删除所有消息的 offset 小于 Log 的 logStartOffset 的 LogSegment。算法计算 LogSegment 的下一个 LogSegment 的 baseOffset 是否小于 Log 的 logStartOffset，如果是则表示是该 LogSegment 可以删除：
+```java
+private def deleteLogStartOffsetBreachedSegments(): Int = {
+  def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) =
+    nextSegmentOpt.exists(_.baseOffset <= logStartOffset)
 
-基于日志大小保留策略首先计算日志文件总大小和 retentionSzie 的差值，然后从日志文件中的第一个日志分段开始查找可删除的日志分段集合，之后删除删除操作。
+  deleteOldSegments(shouldDelete, reason = s"log start offset $logStartOffset breach")
+}
+```
 
+日志删除策略确定的 LogSegment 除了需要满足策略外，还需要满足删除的 LogSegment 中的消息的 offset 是小于 Log 的 HW 的，并且删除的 LogSegment 不能是 Log 的最后一个 LogSegment：
+```java
+private def deletableSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean): Iterable[LogSegment] = {
+  if (segments.isEmpty) {
+    Seq.empty
+  } else {
+    val deletable = ArrayBuffer.empty[LogSegment]
+    var segmentEntry = segments.firstEntry
+    while (segmentEntry != null) {
+      val segment = segmentEntry.getValue
+      val nextSegmentEntry = segments.higherEntry(segmentEntry.getKey)
+      val (nextSegment, upperBoundOffset, isLastSegmentAndEmpty) = if (nextSegmentEntry != null)
+        (nextSegmentEntry.getValue, nextSegmentEntry.getValue.baseOffset, false)
+      else
+        (null, logEndOffset, segment.size == 0)
 
+      if (highWatermark >= upperBoundOffset && predicate(segment, Option(nextSegment)) && !isLastSegmentAndEmpty) {
+        deletable += segment
+        segmentEntry = nextSegmentEntry
+      } else {
+        segmentEntry = null
+      }
+    }
+    deletable
+  }
+}
+```
+
+确定了需要删除的 LogSegment 之后就可以删除过期的 LogSegment，删除之前需要保证 Log 中最少有一个 LogSegment，因此当需要删除的 LogSegment 数量等于 Log 中 LogSegment 数量时会再创建出一个 LogSegment。
 ```java
 private def deleteSegments(deletable: Iterable[LogSegment]): Int = {
   maybeHandleIOException(s"Error while deleting segments for $topicPartition in dir ${dir.getParent}") {
@@ -300,30 +351,62 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 }
 ```
 
-#### 基于日志的起始偏移量
+### Log Compaction
 
-基于日志起始偏移量的保留策略的判断依据是某日志分段的下一个日志分段的起始偏移量是否小于日志的起始偏移量 logStartOffset，如果是则可以删除此日志分段。
+Log Compaction 清理有重复 key 的消息，只保留最新的消息。开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
 
-### Compaction
+Kafka LogMananger 在启动时会启动 LogCleaner，并在启动时创建 numThreads (参数 ```log.cleaner.threads```
+设置，默认 1) 个 CleanerThread 线程用于执行 LogComapction。
 
-日志压缩(Log Compaction)对于有相同 key 的不同 vlaue 值只会保留最新的 value 值，如果只关心最新的 value 值则可以开启日志合并功能，Kafka 会定期将相同 key 的消息进行合并只保留最新的 value 值。
+在 ```CleanThread``` 的 ```doWork``` 方法中先通过 CleanManager 获取可以 Compact 的 Log，然后执行 Compact 操作，如果 Compact 失败则采取回退算法休眠：
+```java
+override def doWork(): Unit = {
+  val cleaned = tryCleanFilthiestLog()
+  if (!cleaned)
+    pause(config.backOffMs, TimeUnit.MILLISECONDS)
+}
+```
+Kafka 日志存储目录内有 ```cleaner-offset-checkpoint``` 文件记录当前分区中已经清理的 offset，通过这个文件可以将 Log 分为已经清理过的部分和未清理的部分。然后在 ```LogCleanerManager#cleanableOffsets``` 方法中在未清理的部分中定位可以清理的范围 ```[firstDirtyOffset, firstUnstableOffset)```。
 
-Log Compaction 执行前后日志分段中的每条消息的偏移量和写入时的偏移量保持一致，Log Compaction 会生成新的日志分段文件，日志分段中每条消息的物理地址会重新按照新文件来组织。Log Compaction 执行之后的偏移量不再是连续的，但是并不影响日志的查询。
+定位可以清理的范围的时候需要排除 activeSegment，同时可以设置参数 ```log.cleaner.min.compaction.lag.ms``` 来配置消息在清理前最小的保留时间来排除消息所在的 Segment。
 
-通过 log.dir 参数设置 Kafka 日志的存放目录，每一个日志目录下都有一个名为 cleanner-offset-checkpoint 的文件，这个文件就是清理检查点文件，用来记录每个主题的每个分区中已清理的偏移量。通过检查点文件可以将 Log 分为已经清理过的部分和未清理的部分。
+```LogCleannerManager#grabFilthiestCompactedLog``` 方法对定位的 offset 范围再次过滤，过滤掉  ```cleanableRatio``` 小于参数 ```log.cleaner.min.cleanable.ratio``` 设置的值的 LogSegment，默认为 0.5。 最后选出 ```cleanableRatio``` 最高的 Log 进行清理：
+```java
+// LogCleannerManager#grabFilthiestCompactedLog
 
-活跃日志分段不会参与 Log Compaction，同时 Kafka 支持通过参数 ```log.cleaner.min.compaction.lag.ms``` 来配置消息在被清理前的最小保留时间。
+val cleanableLogs = dirtyLogs.filter { ltc => 
+  (ltc.needCompactionNow && ltc.cleanableBytes > 0) || ltc.cleanableRatio > ltc.log.config.minCleanableRatio
+  // 计算 celanableRatio 并排除掉小于 log.cleaner.min.cleanable.ratio 的 LogSegment
+}
+if(cleanableLogs.isEmpty) {
+  None
+} else {
+  preCleanStats.recordCleanablePartitions(cleanableLogs.size)
+  // 清理 celanableRatio 最大的 LogSegment
+  val filthiest = cleanableLogs.max
+  inProgress.put(filthiest.topicPartition, LogCleaningInProgress)
+  Some(filthiest)
+}
 
-Log Compaction 是针对 key 的，所以使用时每个消息的 key 不能为 null，每个 broker 会启动 log.cleaner.thread (默认为 1) 个日志清理线程负责执行清理任务，这些线程会选择 ```dirtyRatio = dirtyBytes /(cleanBytes +dirtyBytes)``` 最高的日志文件进行清理。
 
-为了防止日志不必要的频繁清理操作，Kafka 使用参数 log.cleaner.min.cleanable.ratio (默认值为 0.5) 来限定可进行清理操作的最小 dirtyRatio。Kafka 中用于保存消费者消费位移的主题 __consumer_offsets 使用的就是 Log Compaction 策略。
+// LogCleaner
 
-Kafka 中的每个日志清理线程会使用一个名为 SkimpyOffsetMap 的对象来构建 key 与 offset 的映射关系的哈希表，日志清理需要遍历两次日志文件，第一次遍历把每个 key 的哈希值和最后出现的 offset 都保存在 SkimpyOffsetMap 中；第二次遍历会检查每个消息是否符合保留条件，如果符合就保留下来，否则就会被清理。
+// firstDirtyOffset 之前的 LogSegment 的大小之和
+val cleanBytes = log.logSegments(-1, firstDirtyOffset).map(_.size.toLong).sum
+// 可清理的 LogSegment 的大小之和
+val (firstUncleanableOffset, cleanableBytes) = LogCleanerManager.calculateCleanableBytes(log, firstDirtyOffset, uncleanableOffset)
+val totalBytes = cleanBytes + cleanableBytes
+val cleanableRatio = cleanableBytes / totalBytes.toDouble
+```
+
+LogCleaner 在创建 CleanerThread 线程清理日志时，每个日志清理线程都会创建一个 ```SkimpyOffsetMap``` 对象来映射日志中消息的 key 和 消息的 offset。日志清理线程需要遍历两次文件，第一次遍历把消息的 key 和 最后出现的 offset 保存在 ```SkimpyOffsetMap``` 对象中，第二次遍历会检查每个消息是否需要清理，如需要则清理。
+
 
 默认情况下，SkimpyOffsetMap 使用 MD5 来计算 key 的哈希值，占用空间大小为 16B，根据这个哈希值来从 SkimpyOffsetMap 中找到对应的槽位，如果发生冲突则用线性探测法处理。为了防止哈希冲突过于频繁，可以通过 ```log.cleaner.io.buffer.load.factor```(默认 0.9) 来调整负载因子。偏移量占用空间大小为 8B，因此一个映射项占用空间大小为 24B。
 
-每个日志清理线程的 SkimpyOffsetMap 的内存占用大小为 log.cleaner.dedupe.buffer.size / log.cleaner.thread 默认是 128M/1=128M，所以默认情况下 SkimpyOffsetMap 可以保存 128M * 0.9/24B=5033164 个 key 的记录。
+每个日志清理线程的 SkimpyOffsetMap 的内存占用大小为 ```log.cleaner.dedupe.buffer.size / log.cleaner```，默认情况下 SkimpyOffsetMap 可以保存 ```128M * 0.9/24B=5033164``` 个 key 的记录。
 
+#### 墓碑消息
 Log Compaction 会保留 key 相应的最新 value 值，当需要删除一个 key 时 Kafka 提供了墓碑消息(tombstone)的概念，如果一条消息的 key 不为 null，但是其 value 为 null，那么此消息就是墓碑消息。
 
 日志清理线程发现墓碑消息时会先进行常规的清理并保留墓碑消息一段时间，墓碑消息的保留条件是当前墓碑消息所在的日志分段的最近修改时间 lastModifiedTime 大于 deleteHorizonMs，这个 deleteHorizonMs 的计算方式为 clean 部分中最后一个日志分段的最近修改时间减去保留阈值 deleteRetionMs（通过 log.cleaner.delete.retention.ms 配置，默认值 86400000）
@@ -331,3 +414,5 @@ Log Compaction 会保留 key 相应的最新 value 值，当需要删除一个 k
 Log Compaction 执行过后的日志分段的大小会比原先的日志分段文件小，为了防止出现太多的小文件，Kafka 在实际清理过程中并不对单个日志分段文件进行单独清理，而是将日志分段文件中 offset 从 0 到 firstUncleanableOffset 的所有日志分段进行分组，每个日志分段属于一组，分组策略为：按照日志分段的顺序遍历，每组中日志分段的占用空间大小之和不能超过 segmentSize (通过 log.segment.bytes 设置，默认 1GB)，且对应的索引文件占用大小之和不超过 maxIndexSize（通过 log.index.interval.bytes 设置，默认 10MB）。同一个组的多个日志分段清理过后只会生成一个新的日志分段。
 
 Log Compaction 过程中会将每个日志分组中需要保留的消息复制到一个以 .clean 为后缀的临时文件中，此临时文件以当前日志分组中第一个日志分段的文件命名，如 00000000000000000000.log.clean。Log Compaction 之后将 .clean 的文件修改为 .swap 后缀的文件，然后删除原本的日志文件，最后把文件的 .swap 后缀去掉
+
+Log Compaction 执行前后日志分段中的每条消息的偏移量和写入时的偏移量保持一致，Log Compaction 会生成新的日志分段文件，日志分段中每条消息的物理地址会重新按照新文件来组织。Log Compaction 执行之后的偏移量不再是连续的，但是并不影响日志的查询。
