@@ -1,5 +1,6 @@
 package example;
 
+import kafka.server.KafkaConfig;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;
@@ -7,6 +8,8 @@ import org.apache.kafka.clients.consumer.ConsumerPartitionAssignor;
 import org.apache.kafka.clients.consumer.StickyAssignor;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerInterceptor;
+import org.apache.kafka.common.serialization.Deserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.util.Properties;
 
@@ -124,6 +127,35 @@ public abstract class ConfigurationBuilder {
             properties = new Properties();
             properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
             properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupI);
+        }
+
+        /**
+         * 设置消费者 Key 反序列化器
+         * @param clazz
+         * @return
+         */
+        public ConsumerConfigBuilder keyDeserializer(Class<? extends Deserializer> clazz){
+
+            if (clazz == null){
+                properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+                return this;
+            }
+            properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, clazz.getName());
+            return this;
+        }
+
+        /**
+         * 设置消费者 Value 反序列化器
+         * @param clazz
+         * @return
+         */
+        public ConsumerConfigBuilder valueDeserializer(Class<? extends Deserializer> clazz){
+            if (clazz == null){
+                properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+                return this;
+            }
+            properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, clazz.getName());
+            return this;
         }
 
         /**

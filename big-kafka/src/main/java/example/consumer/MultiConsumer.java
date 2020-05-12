@@ -19,7 +19,8 @@ import java.util.concurrent.TimeUnit;
 public class MultiConsumer {
 
     public static void main(String[] args) {
-
+        multiConsumerThread("localhost:9092", "group-1", 1, "test");
+        multiConsumerThread("localhost:9092", "group-2", 1, "test");
     }
 
 
@@ -30,14 +31,15 @@ public class MultiConsumer {
      * @param groupId
      * @param topics
      */
-    public static void multiConsumerThread(String brokers, String groupId, String... topics) {
+    public static void multiConsumerThread(String brokers, String groupId, Integer threadNum, String... topics) {
 
         Properties properties = ConfigurationBuilder
                 .newConsumerConfigBuilder(brokers, groupId)
+                .keyDeserializer(null)
+                .valueDeserializer(null)
                 .build();
 
-        int consumerThreadNum = 4;
-        for (int i = 0; i < consumerThreadNum; i++) {
+        for (int i = 0; i < threadNum; i++) {
             new Thread(new ConsumerThread(properties, topics)).start();
         }
     }
@@ -116,6 +118,7 @@ public class MultiConsumer {
                     ConsumerRecords<String, String> records = kafkaConsumer.poll(Duration.ofMillis(1000));
                     for (ConsumerRecord<String, String> record : records) {
                         // process
+                        System.out.println("consumer: " + kafkaConsumer + ", record: " + record);
                     }
                 }
             } catch (Exception e) {
