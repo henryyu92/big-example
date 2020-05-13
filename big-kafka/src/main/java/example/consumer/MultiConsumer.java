@@ -4,10 +4,12 @@ import example.ConfigurationBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -22,6 +24,7 @@ public class MultiConsumer {
     public static void main(String[] args) {
         multiConsumerThread("localhost:9092", "group-1", 1, "test");
         multiConsumerThread("localhost:9092", "group-2", 1, "test");
+//        multiConsumerThread("localhost:9092", "group-3", 1, "test");
     }
 
 
@@ -119,7 +122,8 @@ public class MultiConsumer {
                     ConsumerRecords<String, String> records = kafkaConsumer.poll(Duration.ofMillis(1000));
                     for (ConsumerRecord<String, String> record : records) {
                         // process
-                        System.out.println("consumer: " + kafkaConsumer + ", record: " + record);
+                        System.out.println("consumer: " + kafkaConsumer + ", record: " + record
+                                + ", offset: " + kafkaConsumer.committed(new TopicPartition(record.topic(), record.partition())));
                     }
                 }
             } catch (Exception e) {

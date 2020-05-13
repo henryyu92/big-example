@@ -1,6 +1,5 @@
 package example;
 
-import kafka.server.KafkaConfig;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;
@@ -33,6 +32,8 @@ public abstract class ConfigurationBuilder {
      * @return
      */
     public abstract ConfigurationBuilder id(String id);
+
+    public abstract ConfigurationBuilder interceptor(Class clazz);
 
     public static ProducerConfigBuilder newProducerConfigBuilder() {
         return new ProducerConfigBuilder();
@@ -77,11 +78,6 @@ public abstract class ConfigurationBuilder {
             return this;
         }
 
-        public ProducerConfigBuilder interceptor(Class<? extends ProducerInterceptor> interceptor){
-            properties.setProperty(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, interceptor.getName());
-            return this;
-        }
-
         /**
          * 重试次数
          * @param retries
@@ -121,6 +117,16 @@ public abstract class ConfigurationBuilder {
         @Override
         public ProducerConfigBuilder id(String id){
             properties.setProperty(ProducerConfig.CLIENT_ID_CONFIG, id);
+            return this;
+        }
+
+        @Override
+        public ConfigurationBuilder interceptor(Class clazz) {
+
+            if (clazz != ProducerInterceptor.class){
+                throw new IllegalArgumentException("producer interceptor must be subclass of ProducerInterceptor !");
+            }
+            properties.setProperty(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, clazz.getName());
             return this;
         }
 
@@ -228,14 +234,15 @@ public abstract class ConfigurationBuilder {
         }
 
         /**
-         * 设置消费者拦截器
-         * @param interceptor
-         * @param <K>
-         * @param <V>
+         * 消费者拦截器配置
+         * @param clazz
          * @return
          */
-        public <K, V> ConsumerConfigBuilder interceptor(Class<? extends ConsumerInterceptor<K, V>> interceptor){
-            properties.setProperty(ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, interceptor.getName());
+        public  ConsumerConfigBuilder interceptor(Class clazz){
+            if (clazz != ConsumerInterceptor.class){
+                throw new IllegalArgumentException("error");
+            }
+            properties.setProperty(ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, clazz.getName());
             return this;
         }
 
@@ -263,6 +270,7 @@ public abstract class ConfigurationBuilder {
         Properties properties;
 
         AdminConfigBuilder(String brokers){
+            properties = new Properties();
             properties.setProperty(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
         }
 
@@ -279,6 +287,11 @@ public abstract class ConfigurationBuilder {
 
         @Override
         public AdminConfigBuilder id(String id) {
+            return null;
+        }
+
+        @Override
+        public ConfigurationBuilder interceptor(Class clazz) {
             return null;
         }
     }

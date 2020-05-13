@@ -1,18 +1,29 @@
-## 副本同步
+## 分区
 
-Kafka 主题中的每个分区都有一个预写日志（write-ahead log），写入 Kafka 的消息就存储在预写日志中。每条消息都有一个唯一的偏移量，用于标识它在当前分区日志中的位置。
+Kafka 以分区作为物理存储单位，每个主题 (Topic) 有一个或多个分区 (Partition)，Producer 发往 broker 的消息根据消息的 key 被分配到指定的分区之后被持久化到分区对应的节点上。
 
-分区使用多副本机制提升可靠性，每个分区有多个副本，Kafka 保证同一个分区所有的副本分布在不同的节点上。Kafka 副本中只有 leader 副本可以对外提供读写服务，其他副本需要定时从 leader 副本拉取消息进行同步，当 leader 副本不可用时需要从其他副本上挑选一个新的 leader 副本对外提供服务。
+Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，其他 replica 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 replica 副本中选举出新的 leader 副本。
 
-Kafka 分区中的所有副本所在的集合为 AR(Assigned Replica)，和 leader 副本保持同步状态的 follower 副本集合为 ISR(In-sync Replica)，没有和 leader 副本保持同步的 follower 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR。
+### 副本
 
-分区中每个副本都有 LEO(LogEndOffset) 表示副本中最有一条消息的下一个 offset。ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息。消息写入 leader 副本后，需要等到 ISR 集合中所有的 follower 副本同步数据然后更新各自的 HW 之后才能被消费者拉取到。
+每个分区有多个副本，Kafka 保证同一个分区的副本分布在不同的节点上。分区的所有副本集合为 AR(Assigned Replica)，和 leader 副本保持同步的 replica 副本集合为 ISR(In-sync Replica)，未能和 leader 副本保持同步的 replica 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR。
+
+分区副本的 LEO (LogEndOffset) 表示副本中最有一条消息的 offset + 1，ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息。因此消息只有在 ISR 集合中所有的 replica 副本同步之后才能被消费者拉取到。
 
 ```
-
+问题：如果在 ISR 同步数据完成前，leader 不可用，消息是否丢失？
 ```
 
-### ISR 伸缩
+Kafka 中 leader 的选举是从 ISR 中的副本选举，当 replica 副本不能与 leader 副本保持同步就需要将其移出 ISR 集合。Kafka 在启动 ```ReplicaMananger``` 时创建了 ```isr-expiration``` 线程监控 replica 副本的同步状态，该线程会以 ```replicaLagTimeMaxMs/2``` (```replica.lag.time.max.ms```，默认 10000ms)为周期遍历 ISR 中的所有副本，当 replica 副本的 LEO 和 leader 副本的 LEO 不相等并且 replica 副本上次和 leader 副本保持一致的时间 (lastCaughtUpTimeMs) 与当前时间相差 ```replicaLagTimeMaxMs``` 则会被移出 ISR。即 ISR 中的 replica  副本和 leader 不能保持同步的最长时间为 ```1.5 * replicaLagTimeMaxMs```。
+
+
+
+### 副本分配
+
+### 数据同步
+
+### leader 选举
+
 
 当 follower 副本不能与 leader 副本保持同步状态或者 follower 副本节点失效时，就会被移出 ISR 集合；当 follower 副本再次与 leader 副本保持同步状态时就会再次加入 ISR 集合中。
 
