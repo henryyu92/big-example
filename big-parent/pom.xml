@@ -23,6 +23,7 @@
         <scala-version>2.11</scala-version>
         <kafka-version>2.4.1</kafka-version>
         <jdbc-version>8.0.18</jdbc-version>
+        <pulsar.version>2.5.1</pulsar.version>
     </properties>
 
     <repositories>
@@ -74,6 +75,12 @@
 
             <dependency>
                 <groupId>org.apache.flink</groupId>
+                <artifactId>flink-java</artifactId>
+                <version>${flink-version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.flink</groupId>
                 <artifactId>flink-connector-kafka_${scala-version}</artifactId>
                 <version>${flink-version}</version>
             </dependency>
@@ -112,12 +119,20 @@
                 <version>1.10.0</version>
             </dependency>
 
-
+            <!-- Kafka -->
             <dependency>
                 <groupId>org.apache.kafka</groupId>
                 <artifactId>kafka_${scala-version}</artifactId>
                 <version>${kafka-version}</version>
             </dependency>
+
+            <!-- Pulsar -->
+            <dependency>
+                <groupId>org.apache.pulsar</groupId>
+                <artifactId>pulsar-client</artifactId>
+                <version>${pulsar.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

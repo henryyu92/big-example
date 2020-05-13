@@ -4,6 +4,7 @@ import example.ConfigurationBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -35,8 +36,8 @@ public class MultiConsumer {
 
         Properties properties = ConfigurationBuilder
                 .newConsumerConfigBuilder(brokers, groupId)
-                .keyDeserializer(null)
-                .valueDeserializer(null)
+                .keyDeserializer(StringDeserializer.class)
+                .valueDeserializer(StringDeserializer.class)
                 .build();
 
         for (int i = 0; i < threadNum; i++) {

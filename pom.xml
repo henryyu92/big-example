@@ -25,6 +25,7 @@
         <module>big-elasticsearch</module>
         <module>big-spark</module>
         <module>big-kafka</module>
+        <module>big-pulsar</module>
     </modules>
 
 

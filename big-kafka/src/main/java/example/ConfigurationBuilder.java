@@ -57,11 +57,21 @@ public abstract class ConfigurationBuilder {
             this.properties = new Properties();
         }
 
+        /**
+         * 生产者消息 key 序列化器
+         * @param serializerClass
+         * @return
+         */
         public ProducerConfigBuilder keySerializer(Class<?> serializerClass) {
             properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serializerClass.getName());
             return this;
         }
 
+        /**
+         * 生产者消息 value 序列化器
+         * @param serializerClass
+         * @return
+         */
         public ProducerConfigBuilder valueSerializer(Class<?> serializerClass) {
             properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serializerClass.getName());
             return this;
@@ -72,8 +82,39 @@ public abstract class ConfigurationBuilder {
             return this;
         }
 
+        /**
+         * 重试次数
+         * @param retries
+         * @return
+         */
         public ProducerConfigBuilder retries(int retries){
             properties.setProperty(ProducerConfig.RETRIES_CONFIG, String.valueOf(retries));
+            return this;
+        }
+
+        public enum Acks{
+            /**
+             * 发送消息后直接返回
+             */
+            None(0),
+            /**
+             * Leader 副本写入后返回
+             */
+            Leader(1),
+            /**
+             * ISR 副本写入后返回
+             */
+            ALL(-1);
+
+            private Integer ack;
+
+            Acks(Integer ack){
+                this.ack = ack;
+            }
+        }
+
+        public ProducerConfigBuilder acks(Acks acks){
+            properties.setProperty(ProducerConfig.ACKS_CONFIG, String.valueOf(acks.ack));
             return this;
         }
 
