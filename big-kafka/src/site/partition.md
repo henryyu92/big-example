@@ -2,56 +2,20 @@
 
 Kafka 以分区作为物理存储单位，每个主题 (Topic) 有一个或多个分区 (Partition)，Producer 发往 broker 的消息根据消息的 key 被分配到指定的分区之后被持久化到分区对应的节点上。
 
-Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，其他 replica 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 replica 副本中选举出新的 leader 副本。
+Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
 
 ### 副本
 
-每个分区有多个副本，Kafka 保证同一个分区的副本分布在不同的节点上。分区的所有副本集合为 AR(Assigned Replica)，和 leader 副本保持同步的 replica 副本集合为 ISR(In-sync Replica)，未能和 leader 副本保持同步的 replica 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR。
+每个分区有多个副本，Kafka 保证同一个分区的副本分布在不同的节点上。分区的所有副本集合为 AR(Assigned Replica)，和 leader 副本保持同步的 follower 副本集合为 ISR(In-sync Replica)，未能和 leader 副本保持同步的 follower 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR。
 
-分区副本的 LEO (LogEndOffset) 表示副本中最有一条消息的 offset + 1，ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息。因此消息只有在 ISR 集合中所有的 replica 副本同步之后才能被消费者拉取到。
+分区副本的 LEO (LogEndOffset) 表示副本中最有一条消息的 offset + 1，ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息。因此消息只有在 ISR 集合中所有的 replica 副本同步之后才能被消费者拉取到。**ISR 集合发生增减或者 ISR 集合中的任意一个副本的 LEO 发生变化时都可能影响整个分区的 HW**
 
 ```
 问题：如果在 ISR 同步数据完成前，leader 不可用，消息是否丢失？
 ```
 
-Kafka 中 leader 的选举是从 ISR 中的副本选举，当 replica 副本不能与 leader 副本保持同步就需要将其移出 ISR 集合。Kafka 在启动 ```ReplicaMananger``` 时创建了 ```isr-expiration``` 线程监控 replica 副本的同步状态，该线程会以 ```replicaLagTimeMaxMs/2``` (```replica.lag.time.max.ms```，默认 10000ms)为周期遍历 ISR 中的所有副本，当 replica 副本的 LEO 和 leader 副本的 LEO 不相等并且 replica 副本上次和 leader 副本保持一致的时间 (lastCaughtUpTimeMs) 与当前时间相差 ```replicaLagTimeMaxMs``` 则会被移出 ISR。即 ISR 中的 replica  副本和 leader 不能保持同步的最长时间为 ```1.5 * replicaLagTimeMaxMs```。
-
-
-
-### 副本分配
-
-### 数据同步
-
-### leader 选举
-
-
-当 follower 副本不能与 leader 副本保持同步状态或者 follower 副本节点失效时，就会被移出 ISR 集合；当 follower 副本再次与 leader 副本保持同步状态时就会再次加入 ISR 集合中。
-
-Kafka 在启动的时候在 ```ReplicaManager#startup``` 中创建了 ```isr-expiration``` 线程监控 follower 副本的同步状态，该线程会周期性的检查是否需要收缩 ISR 集合，周期为 ```replica.lag.time.max.ms /2 ```:
+Kafka 中 leader 是从 ISR 的副本中选举的，当副本不能与 leader 副本保持同步就需要将其移出 ISR 集合。Kafka 在启动 ```ReplicaMananger``` 时创建了 ```isr-expiration``` 线程监控 ISR 中副本的同步状态，该线程会以 ```replicaLagTimeMaxMs/2``` 的周期(```replica.lag.time.max.ms``` 设置，默认 10000ms)遍历 ISR 中的所有副本，当副本的 LEO 和 leader 副本的 LEO 不相等并且副本上次和 leader 副本保持一致的时间 (lastCaughtUpTimeMs) 与当前时间相差 ```replicaLagTimeMaxMs``` 则会被移出 ISR。即 **ISR 中的副本和 leader 副本不能保持同步的最长时间为 ```1.5 * replicaLagTimeMaxMs```**。
 ```java
-scheduler.schedule("isr-expiration", maybeShrinkIsr _, period = config.replicaLagTimeMaxMs / 2, unit = TimeUnit.MILLISECONDS)
-```
-```maybeShrinkIsr``` 中遍历节点在线的分区，然后对每个分区检查是否需要收缩 ISR 集合：
-```java
-private def maybeShrinkIsr(): Unit = {
-  trace("Evaluating ISR list of partitions to see which replicas can be removed from the ISR")
-
-  // Shrink ISRs for non offline partitions
-  allPartitions.keys.foreach { topicPartition =>
-    nonOfflinePartition(topicPartition).foreach(_.maybeShrinkIsr(config.replicaLagTimeMaxMs))
-  }
-}
-```
-```maybeShrinkIsr``` 方法是分区判断是否需要收缩 ISR 集合的实现，ISR 是否需要收缩的检查是在 leader 副本上完成的，当前节点的分区副本如果不是 leader 副本则直接返回 false。当 follower 副本的 LEO 不等于 leader 副本的 LEO 并且 follower 副本上次与 leader 副本同步的时间(lastCaughtUpTimeMs) 和当前时间间隔大于 ```replica.lag.time.max.ms``` 则表示当前 follower 副本不能与 leader 副本同步，需要被移出 ISR 集合，默认值是 10000 ms。
-```java
-def getOutOfSyncReplicas(maxLagMs: Long): Set[Int] = {
-  // ISR 集合去除当前 leader 副本
-  val candidateReplicaIds = inSyncReplicaIds - localBrokerId
-  val currentTimeMs = time.milliseconds()
-  val leaderEndOffset = localLogOrException.logEndOffset
-  candidateReplicaIds.filter(replicaId => isFollowerOutOfSync(replicaId, leaderEndOffset, currentTimeMs, maxLagMs))
-}
-
 private def isFollowerOutOfSync(replicaId: Int,
                                 leaderEndOffset: Long,
                                 currentTimeMs: Long,
@@ -63,39 +27,83 @@ private def isFollowerOutOfSync(replicaId: Int,
 }
 ```
 
-副本同步异常导致被移出 ISR 一般有三种情况：
+副本被移出 ISR 一般有三种情况：
 - follower 同步较慢，在一段时间内都无法追赶上 leader 副本。常见原因是 I/O 瓶颈导致 follower 追加复制消息速度比从 leader 拉取速度慢
 - follower 进程卡住，在一段时间内根本没有向 leader 副本发起同步请求。一般是由于 follower 进程 GC 或者 follower 失效
 - 新启动的 follower 副本，新增的 follower 副本在完全赶上 leader 副本之前不在 ISR 中
 
-```isr-expiration``` 线程从 ISR 集合中去除不能与 leader 副本同步的 follower 副本之后，将新的副本以及 leader 副本数据记录到 ZK 上 ```brokers/topics/<topic>/<paritition>/state 节点中：
+```isr-expiration``` 线程更新 ISR 后将新的 ISR 和 leader 数据记录到 ZK 上 ```/brokers/topics/<topic>/partitions/<paritition>/state``` 节点中：
 ```
 
+```
+记录到 ZK 上的数据包括：
+- ```Leader``` 表示当前分区的 leader 副本所在的 broker 
+- ```ISR``` 表示更新后的 ISR 集合
+- ```LeaderEpoch``` 表示当前分区的 leader epoch
+- ```ControllerEpoch``` 表示当前 Kafka 控制器的 epoch
+- ```version``` 表示版本信息
+
+
+ISR 集合发生变更时还会将变更的记录缓存到 ```isrChangeSet``` 中，ReplicaManager 启动时创建的线程 ```isr-chagne-propagation``` 会以 2500ms 的周期检查 ```isrChangeSet```，如果发现 ISR 集合上次变更到现在查过 5000ms 或者上次广播 ISR 集合变更到现在超过 60000ms 就需要将 ISR 集合变更广播：
+```java
+def maybePropagateIsrChanges(): Unit = {
+  val now = System.currentTimeMillis()
+  isrChangeSet synchronized {
+    if (isrChangeSet.nonEmpty &&
+    // 上次更新 isrChangeSet 到现在时间超过 5000ms
+    (lastIsrChangeMs.get() + ReplicaManager.IsrChangePropagationBlackOut < now ||
+        // 上次广播 ISR 变更时间到现在时间超过 60000ms
+        lastIsrPropagationMs.get() + ReplicaManager.IsrChangePropagationInterval < now)) {
+      zkClient.propagateIsrChanges(isrChangeSet)
+      isrChangeSet.clear()
+      lastIsrPropagationMs.set(now)
+    }
+  }
+}
+```
+ISR 集合变更的广播是在 ZK 的 ```/isr_change_notification``` 下创建 ```isr_change_<seq>``` 的顺序持久节点，并将 ```isrChangeSet``` 中的数据保存到这个节点。
+```
+ls /isr_change_notification
+
 
 ```
-- controller_epoch 表示当前 Kafka 控制器的 epoch
-- leader 表示当前分区的 leader 副本所在的 broker 
-- version 表示版本信息
-- leader_epoch 表示当前分区的 leader epoch
-- isr 表示变更后的 ISR 集合
 
-当 ISR 集合发生变更时还会将变更后的记录缓存到 isrChangeSet 中，isr-chagne-propagation 任务会周期性(固定为 2500ms)检查 isrChangeSet 如果发现 isrChangeSet 中有 ISR 集合的变更记录则会在 ZooKeeper 的 /isr_change_notification 路径下创建 isr_change_ 开头的持久顺序节点并将 isrChangeSet 中的数据保存到这个节点。
-
-Kafka 控制器为 /isr_change_notification 添加了一个 Watcher，当有子节点发生变化时会触发 Watcher 以此通知控制器更新相关元数据信息并向它管理的 broker 节点发送更新元数据的请求，最后删除 /isr_change_notification 节点下已经处理过的节点
-
-当检测到分区的 ISR 集合发生变化时，需要满足两个条件之一才能触发元数据的变更：
+Kafka 控制器为 ```/isr_change_notification``` 添加了一个 Watcher，当有子节点发生变化时会触发 Watcher 通知控制器更新相关元数据信息并向它管理的 broker 节点发送更新元数据的请求，最后删除 ```/isr_change_notification``` 节点下已经处理过的节点:
+```java
+```
+检测到分区的 ISR 集合发生变化时，需要满足两个条件之一才能触发元数据的变更：
 - 上一次 ISR 集合发生变化距离现在已经超过 5s
 - 上一次写入 ZooKeeper 的时间距离现在已经超过 60s
 
 当 follower 的 LEO 追赶上 leader 副本之后就可以进入 ISR 集合，追赶上的判定标准是此副本的 LEO 不小于 leader 副本的 HW，ISR 扩充之后同样会更新 ZooKeeper 中的 /brokers/topics/<topic>/paritition/<partition>/state 节点和 isrChangeSet
 
-当 ISR 集合发生增减时或者 ISR 集合中的任一副本的 LEO 发生变化时都可能影响整个分区的 HW，分区的 HW 为 ISR 集合中副本最小的 LEO
 
-#### 数据拉取
+### 副本分配
+
+Kafka 保证同一分区的不同副本分配在不同的节点上，不同分区的 leader 副本尽可能的均匀分布在集群的节点中以保证整个集群的负载均衡。
+
+在创建主题的时候，如果通过 ```replica-assignment``` 指定了副本分配方案则按照指定的方案分配，否则使用默认的副本分配方案。使用 ```kafka-topics.sh``` 脚本创建主题时 ```AdminUtils``` 根据是否指定了机架信息(```broker.rack``` 参数，所有主题都需要指定)分为两种分配策略：
+- ```assignReplicasToBrokersRackUnaware```：无机架分配方案，
+- ```assignReplicasToBrokersRackAware```：有机架分配方案，
+
+
+创建主题时如果指定了 replica-assignment 参数则按照参数进行分区副本的创建，如果没有指定则按照内部逻辑进行分配。使用 ```kafka-topics.sh``` 脚本创建主题时的内部逻辑分为未指定机架信息(没有配置 broker.rack 参数或者使用 disable-rack-aware 参数创建主题)和指定机架信息(配置了 broker.rack 参数)：
+- 未指定机架信息的分配策略(```AdminUtils#assignReplicasToBrokersRackUnaware```)  
+  遍历每个分区然后从 broker 列表中选取
+  
+- 指定机架信息的分配策略(```AdminUtils#assignReplicasToBrokersRackAware```)
+
+### 副本同步
 
 follower 副本向 leader 副本拉取数据的细节在 ```ReplicaManager#makeFollower``` 中。
 
 https://www.jianshu.com/p/f9a825c0087a
+
+### Leader 选举
+
+#### Leader Epoch
+
+
 #### LEO 和 HW
 副本有两个概念：
 - 本地副本(Local Replica)：对应的 Log 分配在当前的 broker 节点上
@@ -115,10 +123,6 @@ recovery-point-offset-checkpoint 和 replication-offset-checkpoint 这两个文�
 
 log-start-offset-checkpoint 文件对应 logStartOffset，各个副本在变动 LEO 和 HW 的过程中，logStartOffset 也有可能随之而动，Kafka 有一个定时任务来负责将所有分区中的 logStartOffset 刷写到起始点文件 log-start-offset-checkpoint 中，定时周期由 broker 端参数 log.flush.start.offset.checkpoint.interval.ms 配置， 默认 60000
 
-#### Leader Epoch
-
-
-### 分区副本分配
 
 
 ### Leader 副本选举
