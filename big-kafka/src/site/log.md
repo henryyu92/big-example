@@ -17,6 +17,8 @@ Log 是 kafka 日志的抽象，生产者向 broker 发送的消息是以 Log �
 Kafka 中消息不是一条一条的追加到日志文件中，而是以 ```RecordBatch``` 为单元追加的。消息在日志文件中是以二进制的形式存储的，
 
 
+日志刷写
+
 
 ### 日志切分
 
@@ -303,6 +305,7 @@ private def deleteSegments(deletable: Iterable[LogSegment]): Int = {
         checkIfMemoryMappedBufferClosed()
         // remove the segments for lookups
         removeAndDeleteSegments(deletable, asyncDelete = true)
+        // 调整日志的 LogStartOffset
         maybeIncrementLogStartOffset(segments.firstEntry.getValue.baseOffset)
       }
     }

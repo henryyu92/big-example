@@ -156,6 +156,20 @@ rm -rf /<log.dir>/topic_delete
 
 ### 分区管理
 
+#### 修改副本因子
+修改副本因子的功能是通过重分配所使用的 ```kafka-reassign-partitions.sh``` 来实现的，只需要在 JSON 文件中增加或减少 replicas 的参数即可：
+```shell
+{
+  "topic":"topic-throttle",
+  "pritition":1,
+  "replicas":[0,1,2],
+  "log_dirs":["any","any","any"]
+}
+
+bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
+--execute --reassignment-json-file add.json
+```
+
 ### 配置管理
 ```kafka-configs.sh``` 脚本是专门用来对配置进行操作的，也就是在运行状态下修改原有的配置达到动态变更的目的。脚本包含变更配置 alter 和查看配置 describe 这两种指令类型，支持主题、broker、用户和客户端的配置。
 
