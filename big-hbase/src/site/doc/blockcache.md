@@ -23,7 +23,21 @@ HBase 提供了多种 BlockCache 接口的实现类，根据不同的应用场�
 
 LruBlockCache 是 HBase 默认的 BlockCache 机制，将所有数据都放入 JVM 中管理。LruBlockCache 使用 ConcurrentHashMap 管理 blockKey 到 Block 的映射，查询时只需要根据 blockKey 就可以获取到对应的 Block。
 
-LruBlockCache 使用三级缓存机制，即存储缓存的数据分为三个等级
+LruBlockCache 
+
+#### 写缓存
+
+LruBlockCache 使用三级缓存机制，即存储缓存的数据分为三个等级：single, multi 和 memory。Block 在存入 LruCacheBlock 前会包装成 LruCachedBlock，LruCachedBlock 在创建的时候会根据 imMemory 参数来设置优先级，如果为 true 则表示需要常驻内存，优先级为 ```BlockPriority.MEMORY```，否则为 ```BlockPriority.SINGLE```。
+
+```java
+```
+
+
+#### 读缓存
+
+#### 缓存淘汰
+
+
 
 LruBlockCache 使用三级缓存机制，将整个 BlockCache 分为三部分：single、multi、in-memory，分别占到 25%, 50%, 25%。Block 从 HFile 中加载出来后放入 single，如果后续有多个请求访问到这个 Block，则将该 Block 移到 multi，in-memory 区表示数据可以常驻内存。in-memory 区用于存放访问频繁、量小的数据，比如元数据。在建表的时候设置列簇属性 IN_MEMORY=true 之后该列簇的 Block 在磁盘中加载出来后会直接放入 in-memory 区，但是数据写入时并不会写入 in-memory 区，而是和其他 BlockCache 区一样，只有在加载的时候才会放入，进入 in-memory 区的 Block 并不意味着一直存在于该区域，在空间不足的情况下依然会基于 LRU 淘汰算法淘汰最近不活跃的一些 Block。HBase 元数据(hbase:meta, hbase:namespace 等)都存放在 in-memory 区，因此对于很多业务表来说，设置数据属性 IN_MEMEORY=ture 时需要注意可能会由于空间不足而导致 hbase:meta 等元数据被淘汰，从而会严重影响业务性能
 

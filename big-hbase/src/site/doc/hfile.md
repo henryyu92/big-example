@@ -1,6 +1,9 @@
 ## HFile
 
-HBase 中 MemStore 的大小达到阈值之后会触发 flush，flush 之后每个 MemStore 都会转变成 StoreFile 以 HFile 的格式存储在 HDFS 上。
+HBase 中 MemStore 的大小达到阈值之后会触发 flush，之后每个 MemStore 生成一个 StoreFile 以 HFile 的格式存储在 HDFS 上。HFile 中存储的是有序的 K-V 对，其中的 K 和 V 都是字节数组。
+
+从逻辑上看 HFile 主要分为 4 个部分：
+- ```ScannedBlock```：包括 DataBlock, LeafIndexBlock, BloomBlock。顺序扫描 HFile 时所有 Block 都
 
 
 MmeStore 中数据落盘之后会形成一个文件写入 HDFS，这个文件称为 HFile，HFile 文件主要分为 4 个部分：
