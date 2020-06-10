@@ -1,13 +1,34 @@
 ## 数据模型
-和关系型数据库(RDBMS)类似，HBase 有表、行和列的概念，数据存储在表里。
 
-- **命名空间(Namespace)**：命名空间是表的逻辑分组，类似于关系型数据库中的数据库。在创建表的时候使用 ```<table_namespace>:<table_name>``` 指定表的命名空间。系统预置了两个命名空间：hbase 是系统命名空间，包含 HBase 内部的表；default 是没有显式指定命名空间的表会自动的分组到这个命名空间
-- **表(Table)**：HBase 的 Table 是由多个 Row 组成。HBase 中的每个表都有自己的目录，位于 HBase 根目录(/hbase)下，每个表目录包含一个名为 .tableInfo 的顶层文件，该文件保存了针对该表的 HTableDescriptor 序列化之后的内容，包含了元数据信息
-- **行(Row)**：HBase 的 Row 由一个行键(rowKey)以及多个行键对应的列(column)组成。HBase 表中所有的行按照行键的字典顺序由小到大存储，因此行键的设计非常重要
-- **列(Column)**：HBase中的列由列族(column family)和列限定符(qualifier)组成，列限定符由 ：（冒号）字符分隔，如 content:html
-- **列族(Column Family)**：列族在物理上通常出于性能原因将一组列及其值合并在一起。每个列族都有一组存储属性，例如是否应将其值缓存在内存中、如何压缩其数据或对其行键进行编码等。列族在表创建的时候需要指定，一个列族下可以设置任意多个列限定符，即一个列族可以有任意多个列
-- **时间戳(Timestamp)**：每个值都伴随着一个时间戳，是给定版本值的标识符。默认情况下，时间戳表示写入数据时regionserver上的时间，但将数据放入单元格时可以指定其他时间戳值
-- **单元格(Cell)**：Cell 是由五元组 (row, column, timestamp, type, value) 组成的结构，其中 type 表示操作类型(PUT/DELETE)，timestamp 表示 cell 的版本
+HBase 作为 K-V 型数据库，有着和关系型数据相似的术语：
+
+**命名空间(Namespace)**
+
+命名空间是表的逻辑分组，类似于关系型数据库中的数据库。在创建表的时候使用 ```<table_namespace>:<table_name>``` 指定表的命名空间。系统预置了两个命名空间：hbase 是系统命名空间，包含 HBase 内部的表；default 是默认的命名空间，没有显式指定命名空间的表会自动的分组到这个命名空间
+
+**表(Table)**
+
+HBase 的 Table 是由多个 Row 组成。HBase 中的每个表都有自己的目录，位于 HBase 根目录(/hbase)下，每个表目录包含一个名为 .tableInfo 的顶层文件，该文件保存了针对该表的元数据信息 HTableDescriptor 序列化之后的内容。在插入数据之前需要先创建表
+
+**行(Row)**
+
+HBase 的 Row 由一个行键(rowKey)以及多个行键对应的列(column)组成。HBase 表中所有的行按照行键的字典顺序由小到大存储，因此行键的设计非常重要
+
+**列(Column)**
+
+HBase中的列由列族(column family)和列限定符(qualifier)组成，列限定符由 ：（冒号）字符分隔，如 content:html
+
+**列族(Column Family)**
+
+列族在物理上通常出于性能原因将一组列及其值合并在一起。每个列族都有一组存储属性，例如是否应将其值缓存在内存中、如何压缩其数据或对其行键进行编码等。列族在表创建的时候需要指定，一个列族下可以设置任意多个列限定符，即一个列族可以有任意多个列
+
+**时间戳(Timestamp)**
+
+每个值都伴随着一个时间戳，是给定版本值的标识符。默认情况下，时间戳表示写入数据时regionserver上的时间，但将数据放入单元格时可以指定其他时间戳值
+
+**单元格(Cell)**
+
+Cell 是由五元组 (row, column, timestamp, type, value) 组成的结构，其中 type 表示操作类型(PUT/DELETE)，timestamp 表示 cell 的版本
 
 
 HBase 中，数据有序的存在表里面，表有行和列，但是 HBase 和关系型数据库(RDBMS)并不相同，HBase 更像一个稀疏的、多维的、有序的 Map。

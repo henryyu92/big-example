@@ -24,6 +24,7 @@
         <kafka-version>2.4.1</kafka-version>
         <jdbc-version>8.0.18</jdbc-version>
         <pulsar.version>2.5.1</pulsar.version>
+        <elasticsearch.version>7.7.1</elasticsearch.version>
     </properties>
 
     <repositories>
@@ -130,6 +131,13 @@
                 <groupId>org.apache.pulsar</groupId>
                 <artifactId>pulsar-client</artifactId>
                 <version>${pulsar.version}</version>
+            </dependency>
+
+            <!-- Elasticsearch -->
+            <dependency>
+                <groupId>org.elasticsearch.client</groupId>
+                <artifactId>elasticsearch-rest-high-level-client</artifactId>
+                <version>${elasticsearch.version}</version>
             </dependency>
 
         </dependencies>
