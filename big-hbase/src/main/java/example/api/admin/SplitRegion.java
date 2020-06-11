@@ -1,4 +1,4 @@
-package example.admin;
+package example.api.admin;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;

@@ -1,4 +1,4 @@
-package example.admin;
+package example.api.admin;
 
 import example.ConfigurationBuilder;
 import org.apache.kafka.clients.admin.*;

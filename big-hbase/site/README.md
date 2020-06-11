@@ -5,8 +5,10 @@
 - [API](doc/api.md)
 
 ### 核心组件
-- [HFile](doc/hfile.md)
+- [Region](doc/region.md)
 - [BlockCache](doc/blockcache.md)
+- [HLog](doc/hlog.md)
+- [HFile](doc/hfile.md)
 - [Coprocessor](doc/coprocessor.md)
 
 ### 核心流程

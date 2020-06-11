@@ -2,6 +2,8 @@
 
 HBase 设计了缓存结构 BlockCache 用以提升读性能，客户但在读取 Block 时首先检查 BlockCache 中是否存在，如果存在则直接从 BlockCache 中读取，否则从 HFile 中加载并将 Block 缓存在 BlockCache 中。Block 是 HBase 数据读写的最小单元，即数据从 HFile 中读取都是以 Block 为最小单元执行的。
 
+BlockCache 缓存对象是一系列 Block 块，一个 Block 默认为 64K，由物理上相邻的多个 K-V 数据组成。BlockCache 同时利用了[空间局部性]()和[时间局部性]()原理，即最近将读取的数据很可能与当前读到的数据在地址上时临近的，以及一个数据正在被访问，那么近期它还可能被再次访问。当前 BlockCache 主要有两种实现：LRUBlockCache 和 BucketCache。
+
 BlockCache 是 RegionServer 级别的，一个 RegionServer 只有一个 BlockCache，RegionServer 在启动的时候完成 BlocCache 的初始化：
 ```java
 // HRegionServer 构造函数中初始化 BlockCache

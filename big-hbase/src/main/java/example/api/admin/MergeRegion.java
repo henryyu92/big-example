@@ -1,4 +1,4 @@
-package example.admin;
+package example.api.admin;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
@@ -6,9 +6,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 
-import java.io.IOException;
 import java.util.List;
-import java.util.Timer;
 import java.util.concurrent.TimeUnit;
 
 
