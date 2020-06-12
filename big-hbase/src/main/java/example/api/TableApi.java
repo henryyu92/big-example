@@ -1,6 +1,7 @@
 package example.api;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 
@@ -41,7 +42,17 @@ public class TableApi extends BaseApi {
     }
 
     public void get(String table, String rowkey){
-
+        Connection conn = getConnection();
+        try(Table t = conn.getTable(TableName.valueOf(table))){
+            Get get = new Get(rowkey.getBytes());
+            Result result = t.get(get);
+            if (result != null){
+                Cell cell = result.current();
+                System.out.println(new String(cell.getValueArray()));
+            }
+        }catch (IOException e){
+            e.printStackTrace();
+        }
     }
 
     public void scan(String table, String startKey, String stopKey){

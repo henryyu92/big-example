@@ -1,7 +1,6 @@
 ## 系统架构
 
 HBase 借鉴了 BigTable 论文，是典型的 Master-Slave 模型。Master 节点负责管理集群，RegionServer 节点负责处理读写请求。HBase 的数据最终存储在 HDFS 上，并且使用 ZooKeeper 用于协助 Master 管理集群。
-
 ![HBase 系统架构](../resources/archi.jpg)
 
 ### 客户端
@@ -17,20 +16,6 @@ ZooKeeper 是基于 Google 的 Chubby 开源实现，主要用于协调管理分
 - **管理系统核心元数据**：ZooKeeper 中保存着系统元数据表 hbase:meta 所在的 RegionServer 地址，同时 ZooKeeper 中也管理着当前系统中正常工作的 RegionServer 集合
 - **参与 RegionServer 宕机恢复**：ZooKeeper 通过心跳可以感知到 RegionServer 是否宕机，并通知 Master 对宕机的 RegionServer 做分片迁移
 - **实现分布式锁**：HBase 中对一张表进行各种管理操作需要先加表锁，ZooKeeper 可以通过其特定的机制实现分布式表锁
-
-ZooKeeper 中存储了 HBase 的元数据信息，这些数据通过在 ZooKeeper 的 /hbase 节点下创建子节点保存：
-- ```meta-region-server```： 存储 HBase 集群 hbase:meta 元数据表所在的 RegionServer 访问地址。客户端读写数据首先会从此节点读取 hbase:meta 元数据的访问地址，将部分元数据加载到本地，根据元数据进行数据路由
-- ```master/backup-master```：存储 HBase 集群中 Master 和 backupMaster 节点的信息
-- ```table```：集群中所有表的信息
-- ```region-in-transition```：记录 Region 迁移过程中的状态变更。Region 的迁移需要先执行 unassign 操作将此 Region 从 open 状态变为 offline 状态(中间涉及 pending_close, closing, closed 等过渡状态)，然后在目标 RegionServer 上执行 assign 操作使 Region 的状态从 offline 变为 open，在 Region 的整个迁移过程中 RegionServer 将 Region 的状态保存到 ZooKeeper 的 ```/hbase/region-in-transition``` 节点中。Master 监听 ZooKeeper 对应的节点，当 Region 状态发生变更后能立马获得通知，然后更新 Region 在 hbase:meta 中的状态和内存中的状态
-- ```table-lock```：HBase 使用 ZooKeeper 实现分布式锁。HBase 支持单行事务，对表的 DDL 操作之前需要先获取表锁，防止多个 DDL 操作之间发生冲突，由于 Region 分布在多个 RegionServer 上，因此表锁需要使用分布式锁
-- ```onlline-snapshot```：实现在线 snapshot 操作。Master 通过 online-snapshot 节点通知监听的 RegionServer 对目标 Region 执行 snapshot 操作
-- ```replication```：实现 HBase 复制功能
-- ```splitWAL/recovering-regions```：用于 HBase 故障恢复
-- ```rs```：存储集群中所有运行的 RegionServer
-- ```hbaseid```：
-- ```namespace```：
-- ```balancer```：
 
 ### Master
 

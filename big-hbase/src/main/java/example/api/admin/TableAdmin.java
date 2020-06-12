@@ -22,17 +22,40 @@ public class TableAdmin extends BaseApi {
     }
 
 
-    public void createTable(String tableName) throws IOException {
+    public void createTable(String tableName) {
         Connection conn = getConnection();
 
-        Admin admin = conn.getAdmin();
+        try(Admin admin = conn.getAdmin()){
+            TableDescriptor tableDescriptor = TableDescriptorBuilder
+                    .newBuilder(TableName.valueOf(tableName))
+                    .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder("cf".getBytes()).build())
+                    .setCompactionEnabled(true)
+                    .build();
 
-        TableDescriptor tableDescriptor = TableDescriptorBuilder
-                .newBuilder(TableName.valueOf(tableName))
-                .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder("cf".getBytes()).build())
-                .setCompactionEnabled(true)
-                .build();
+            admin.createTable(tableDescriptor);
+        }catch (IOException e){
 
-        admin.createTable(tableDescriptor);
+        }
+
+
+
+    }
+
+    /**
+     * 查看表的描述信息
+     * @param tableName
+     */
+    public void describe(String tableName){
+        Connection conn = getConnection();
+
+        try(Admin admin = conn.getAdmin()){
+
+            TableDescriptor descriptor = admin.getDescriptor(TableName.valueOf(tableName));
+
+            System.out.println(descriptor);
+
+        }catch (IOException e){
+
+        }
     }
 }

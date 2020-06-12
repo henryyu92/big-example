@@ -1,9 +1,45 @@
 ## 配置
 
+HBase 依赖于 ZooKeeper 和 HDFS，通过配置 ZooKeeper 和 HDFS 的参数可以使 HBase 达到更佳的性能。
+
+### ZooKeeper
+
+HBase 使用 ZooKeeper 实现了 Master 的高可用、RegionServer 宕机异常检测、分布式锁等一系列功能。HBase 集群的部署依赖于 ZooKeeper，在 HBase 的配置文件 conf/hbase-site.xml 中需要配置 ZooKeeper 相关的属性：
+```xml
+<!-- 配置 ZK 集群 host，必需 -->
+<property>
+    <name>hbase.zookeeper.quorum</name>
+    <value>localhost</value>
+</property>
+<!-- ZK 客户端端口，非必需 -->
+<property>
+    <name>hbase.zookeeper.property.clientPort</name>
+    <value>2181</value>
+</property>
+```
+ZooKeeper 中存储了 HBase 的元数据信息，这些数据通过在 ZooKeeper 的 /hbase 节点下创建子节点保存：
+- ```meta-region-server```： 存储 HBase 集群 hbase:meta 元数据表所在的 RegionServer 访问地址。客户端读写数据首先会从此节点读取 hbase:meta 元数据的访问地址，将部分元数据加载到本地，根据元数据进行数据路由
+- ```master/backup-master```：存储 HBase 集群中 Master 和 backupMaster 节点的信息
+- ```table```：集群中所有表的信息
+- ```region-in-transition```：记录 Region 迁移过程中的状态变更。Region 的迁移需要先执行 unassign 操作将此 Region 从 open 状态变为 offline 状态(中间涉及 pending_close, closing, closed 等过渡状态)，然后在目标 RegionServer 上执行 assign 操作使 Region 的状态从 offline 变为 open，在 Region 的整个迁移过程中 RegionServer 将 Region 的状态保存到 ZooKeeper 的 ```/hbase/region-in-transition``` 节点中。Master 监听 ZooKeeper 对应的节点，当 Region 状态发生变更后能立马获得通知，然后更新 Region 在 hbase:meta 中的状态和内存中的状态
+- ```table-lock```：HBase 使用 ZooKeeper 实现分布式锁。HBase 支持单行事务，对表的 DDL 操作之前需要先获取表锁，防止多个 DDL 操作之间发生冲突，由于 Region 分布在多个 RegionServer 上，因此表锁需要使用分布式锁
+- ```onlline-snapshot```：实现在线 snapshot 操作。Master 通过 online-snapshot 节点通知监听的 RegionServer 对目标 Region 执行 snapshot 操作
+- ```replication```：实现 HBase 复制功能
+- ```splitWAL/recovering-regions```：用于 HBase 故障恢复
+- ```rs```：存储集群中所有运行的 RegionServer
+- ```hbaseid```：
+- ```namespace```：
+- ```balancer```：
+
+### HDFS
+
+HBase 的数据文件都存放在 HDFS 上，通过 HDFS 的可扩展性以及多副本可靠性保证 HBase 的可扩展性和高可靠性。
 
 - HBase 本身并不存储文件，它只规定文件格式以及文件内容，实际文件存储由 HDFS 实现
 - HBase 不提供机制保证存储数据的高可靠，数据的高可靠性由 HDFS 的多副本机制保证
 - HBase-HDFS 体系是典型的计算存储分离架构，可以方便的使用其他存储代替 HDFS 作为 HBase 的存储方案，也可以使计算资源和存储资源独立扩容缩容
+
+HBase 基于 HDFS 存储的体系是典型的计算和存储分离的架构，这种耦合使得可以独立的扩容存储或者计算而不会相互影响。
 
 HBase 的数据默认存储在 HDFS 的 ```/hbase```目录下：
 - ```.hbase-snapshot```：snapshot 文件存储目录，执行 snapshot 操作后相关的 snapshot 元数据文件存储在该目录

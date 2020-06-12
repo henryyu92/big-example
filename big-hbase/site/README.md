@@ -2,7 +2,7 @@
 
 - [数据模型](doc/data_model.md)
 - [架构设计](doc/arch.md)
-- [API](doc/api.md)
+- [客户端](doc/client.md)
 
 ### 核心组件
 - [Region](doc/region.md)

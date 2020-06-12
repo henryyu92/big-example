@@ -1,17 +1,32 @@
 ## 客户端
 
-HBase 本身是 Java 开发的，因此非 Java 语言的客户端需要先访问 ThriftServer，然后通过 ThriftServer 的 Java HBase 客户端来请求 HBase 集群。
-
-HBase 也支持 Shell 交互式客户端，其本质是用 JRuby 脚本调用 HBase Java 客户端来实现。
+HBase 本身是 Java 开发的，因此非 Java 语言的客户端需要先访问 ThriftServer，然后通过 ThriftServer 的 Java HBase 客户端来请求 HBase 集群。HBase 也支持 Shell 交互式客户端，其本质是用 JRuby 脚本调用 HBase Java 客户端来实现。
 
 HBase 将 Region 定位功能设计在客户端上，因此 HBase 的客户端并不轻量级。
 
+HBase 客户端运行需要 4 个步骤：
+- 获取集群 Configuration 对象：HBase 客户端需要使用到 hbase-site.xml, core-site.xml, hdfs-site.xml 这 3 个配置文件，需要将这三个文件放入到 JVM 能加载的 classpath 下，然后通过 ```HBaseConfiguration.create()``` 加载到 Configuration 对象
+- 根据 Configuration 初始化集群 Connection 对象：Connection 维护了客户端到 HBase 集群的连接。一个进程中只需要建立一个 Connection 即可，HBase 的 Connection 本质上是是由连接到集群上所有节点的 TCP 连接组成，客户端请求根据请求的数据分发到不同的物理节点。Connection 还缓存了访问的 Meta 信息，这样后续的大部分请求都可以通过缓存的 Meta 信息直接定位到对应的 RegionServer 上
+- 通过 Connection 实例化 Table：Table 是一个轻量级的对象，实现了访问数据的 API 操作，请求执行完毕之后需要关闭 Table
+- 执行 API 操作
 
-### 命令行
+### 定位 Meta 表
 
-### Java API
+HBase 中表的数据是由多个 Region 构成，这些 Region 分布在整个集群的 RegionServer 上，因此客户端在操作数据时首先需要确定数据所在的 RegionServer，然后才能到对应的 RegionServer 上操作数据。
 
-#### SCAN
+HBase 设计了内部表 ```hbase:meta``` 表专门用来存放整个集群所有的 Region 信息。```hbase:meta``` 表只有 ```info``` 这个列簇，表中的每行数据都表示一个 Region 信息，其中 rowkey 是由 ```表名 + Region 起始 rowkey + Region 创建时间 + 前面三个字段的 MD5 Hex 值，即 <TableName>_<StartRow>_<Timestamp>_<EncodedName>```。列簇中包含 4 列：
+- ```info:regioninfo```：主要存储 EncodedName, RegionName, StartRow, StopRow
+- ```info:seqnumDuringOpen```：主要存储 Region 打开时的 sequenceId
+- ```info:server```：主要存储 Region 对应的 RegionServer
+- ```info:serverstartcode```：主要存储 Region 对应的 RegionServer 的启动 TimeStamp
+
+### Meta 表缓存
+
+
+
+### Admin
+
+### SCAN
 
 HBase 客户端的 Scan 操作能够设置多个维度的属性，使得 Scan 操作比较复杂。Scan 操作在获取到 scanner 之后调用 next 方法获取数据时先到 cache 队列中拿数据，如果 cache 队列中数据不足则会发起一次 RPC 向服务端请求数据，客户端收到数据之后通过 scanResultCache 把这些数据内的多个 cell 进行重组，最终组成用户需要的结果放入 cache 中。整个 RPC 请求到重组数据放入 cache 的过程称为 loadCache 操作。
 
@@ -73,6 +88,4 @@ FamilyFilter 用于过滤列族，但通常会在使用 Scan 过程中通过设�
 #### QualifierFilter
 #### ColumnPrefixFilter
 ColumnPrefixFilter 用于列限定符的前缀过滤，即过滤包含某个前缀的所有列名。
-
-#### PUT
 
