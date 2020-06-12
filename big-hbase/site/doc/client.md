@@ -92,47 +92,30 @@ BinaryPrefixComparator | 比较
 NullComparator | 判断给定的是否为空
 BitComparator | 按位比较
 RegexStringComparator | 正则的比较器，仅支持 EQUAL 和非 EQUAL
-SubstringComparator | 子串是否出现在 value 中
+SubstringComparator | 检测一个字符串是否包含于 value 中，不区分大小写
 
 #### SingleColumnValueFilter
+```java
+```
 #### SingleColumnVlaueExcludeFilter
+```java
+```
 #### FamilyFilter
 FamilyFilter 用于过滤列族，但通常会在使用 Scan 过程中通过设定扫描的列族来实现，而不是直接使用 FamilyFilter 实现。
+```java
+```
 #### QualifierFilter
+```java
+```
 #### ColumnPrefixFilter
 ColumnPrefixFilter 用于列限定符的前缀过滤，即过滤包含某个前缀的所有列名。
+```java
+```
 
 HBase 提供了多种 Filter，在使用 Filter 的过程中也需要注意：
 - ```PrefixFilter```：过滤 rowkey 为指定前缀的数据，但是即使指定了前缀，Scan 也会从最开始的 rowkey 开始扫描从而会扫描大量的无效行，建议在使用 PrefixFilter 时指定 startRow 参数尽量过滤掉无用的数据扫描，或者将 PrefixFilter 转换成等价的 Scan
 - ```PageFilter```：用于分页的 Filter，但是由于 HBase 中的 Filter 状态全部都是 Region 内有效的，Region 切换时其内部计数器会被清 0，因此可能导致扫描的数据跨 Region 导致返回数据量超过设定的页数量。使用 Scan 的 setLimit 方法可以实现分页功能
 - ```SingleColumnValueFilter```：用于根据列过滤数据，SingleColumnValue 必须遍历一行数据中的每一个 cell，因而不能和其他 Filter 组合成 FilterList
-
-
-#### RegexStringComparator
-RegexStringComparator 支持正则表达式的值比较。
-```
-// 正则表达式和 Java 正则表达式相同
-RegexStringComparator comparator = new RegexStringComparator("regex")
-SingleColumnValueFilter filter = new SingleValueFilter(cf, column, CompareOp.EQUAL, comparator);
-scan.setFilter(filter);
-```
-#### SubstringComparator
-SubstringComparator 用于检测一个字符串是否包含于值中，不区分大小写。
-```
-SubstringComparator comparator = new SbustringComparator("sub");
-SingleColumnValueFilter filter = new SingleValueFilter(cf, column, CompareOp.EQUAL, comparator);
-scan.setFilter(filter);
-```
-#### BinaryPrefixComparator
-BinaryPrefixComparator 是前缀二进制比较器，只比较前缀是否相同。
-```
-
-```
-#### BinaryComparator
-BinaryComparator 是二进制比较器，用于按照字典序比较 Byte 数据值。
-```
-```
-
 
 ### Put
 
