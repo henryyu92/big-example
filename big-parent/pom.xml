@@ -134,9 +134,16 @@
             </dependency>
 
             <!-- Elasticsearch -->
+
             <dependency>
                 <groupId>org.elasticsearch.client</groupId>
                 <artifactId>elasticsearch-rest-high-level-client</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.elasticsearch</groupId>
+                <artifactId>elasticsearch</artifactId>
                 <version>${elasticsearch.version}</version>
             </dependency>
 
@@ -160,4 +167,5 @@
         </pluginManagement>
     </build>
 
+>>>>>>> 36b8f23a7f8668805ccaca8084cc904746ae7d7b
 </project>

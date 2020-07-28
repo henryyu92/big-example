@@ -22,11 +22,9 @@
         <module>big-parent</module>
         <module>big-flink</module>
         <module>big-hbase</module>
-        <module>big-elasticsearch</module>
+        <module>big-es</module>
         <module>big-spark</module>
         <module>big-kafka</module>
         <module>big-pulsar</module>
     </modules>
-
-
 </project>
