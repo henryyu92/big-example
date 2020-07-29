@@ -26,4 +26,23 @@ final List<ZenPing.PingResponse> pingResponses = filterPingResponses(fullPingRes
 // 如果 activeMaster 为空则从 masterCandidate 中选举，选举细节在 ElectMasterService 中
 ```
 
-在 ES 中，发送投票就是发送加入集群请求(JoinRequest)，得票就是申请加入该节点的请求的数量。收集投票进行统计在 `ZenDiscovery#handleJoinRequest` 中实现，接收到的连接被存储到 `ElectionContext#joinRequestAccumulator` 方法中
+在 ES 中，发送投票就是发送加入集群请求(JoinRequest)，得票就是申请加入该节点的请求的数量。收集投票进行统计在 `ZenDiscovery#handleJoinRequest` 中实现，接收到的连接被存储到 `ElectionContext#joinRequestAccumulator` 方法中，当节点检查收到的投票否足够时，就是检查加入它的连接数是否足够，其中会去掉没有 master 资格节点的投票。
+
+选举出的临时 Master 有两种情况：该临时 Master 是本节点或非本节点。如果临时 Master 是本节点：
+- 等待足够多的具备 Master 资格的节点加入本节点(投票达到法定人数)，完成选举
+- 超时(默认 30s)后还没有满足数量的 join 请求则选举失败，需要进行下一轮选举
+- 选举成功后发布新的 clusterState
+
+如果临时 Master 不是本节点：
+- 不再接受其他节点的 join 请求
+- 向 Master 发送加入请求，并等待回复，等待时间默认 1m，超时后重试，默认重传 3 次，这个实现在方法 joinElectedMaster 中
+- 最终当选的 Master 会先发布集群状态，才确认客户的 join 请求，因此 joinElectedMaster 返回代表接收到了 join 请求的确认，并且已经收到了集群状态
+
+### 节点失效检测
+
+节点失效检测会监控节点是否离线，然后处理其中的异常。ES 中有两种失效检测：
+- NodeFaultDetection 由 Master 节点执行检测加入的集群的节点是否异常
+- MasterFaultDetection 由集群中非 Master 节点检测 Master 节点是否异常
+
+ES 中节点的失效检测都是定期(默认 1s) 发送 ping 请求探测节点是否正常，默认当失败达到 3 次或者连接模块通知节点离线
+
