@@ -1,4 +1,6 @@
-## 选主流程
+## Discovery
+
+### 选主流程
 
 Elasticsearch 中 Discovery 模块负责发现集群中的节点以及主节点的选举。ES 支持多种不同的 Discovery 类型，内置的为 Zen Discovery，封装了节点发现、选主等过程。
 
@@ -44,5 +46,9 @@ final List<ZenPing.PingResponse> pingResponses = filterPingResponses(fullPingRes
 - NodeFaultDetection 由 Master 节点执行检测加入的集群的节点是否异常
 - MasterFaultDetection 由集群中非 Master 节点检测 Master 节点是否异常
 
-ES 中节点的失效检测都是定期(默认 1s) 发送 ping 请求探测节点是否正常，默认当失败达到 3 次或者连接模块通知节点离线
+ES 中节点的失效检测都是定期(默认 1s) 发送 ping 请求探测节点是否正常，默认当失败达到 3 次或者连接模块通知节点离线则认为节点离开，需要处理节点离开事件。
+
+NodeFaultDetection 事件处理在 `ZenDiscovery#handleNodeFailure` 中执行 `NodeRemovalClusterStateTaskExecutor#execute` 方法中，首先检查当前集群总节点数是否达到法定节点数(过半)，如果不足则会放弃 Master 身份，重新加入集群。
+
+MasterFaultDetection 事件处理会重新加入集群，本质是该节点重新执行一遍选主流程，具体实现在 `ZenDiscovery#handleMasterGone` 方法中。
 
