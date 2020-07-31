@@ -42,10 +42,10 @@ public class TableApi extends BaseApi {
 
     }
 
-    public void get(String table, String rowkey){
+    public void get(String table, String row){
         Connection conn = getConnection();
         try(Table t = conn.getTable(TableName.valueOf(table))){
-            Get get = new Get(rowkey.getBytes());
+            Get get = new Get(row.getBytes());
             Result result = t.get(get);
             if (result != null){
                 Cell cell = result.current();
