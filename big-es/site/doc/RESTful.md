@@ -15,12 +15,40 @@ GET /indices_name
 PUT /indice_nam
 ```
 
-设置索引
+设置索引 settings，`number_of_shards`  是 ES 分片数，需要在创建索引时指定，一旦指定就不能修改
 
 ```sh
-curl -X POST 'http://localhost:9200' -d '{
-
+curl -H "Content-Type: application/json" -X PUT 'http://localhost:9200/hello/_settings?pretty' -d '{
+  "settings": {
+    "number_of_replicas": 1
+  }
 }'
+```
+
+查看索引 settings
+
+```sh
+curl -X GET 'http://localhost:9200/hello/_settings?pretty'
+```
+
+
+
+设置索引 mapping
+
+```sh
+curl -H "ContentType: application/json" -X PUT 'http://localhost:9200/hello/_mapping' -d '{
+	"properties":{
+		"field_name":{
+			"type":"text"
+		}
+	}
+}'
+```
+
+查看索引 mapping
+
+```sh
+curl -X GET 'http://localhost:9200/hello/_mapping?pretty'
 ```
 
 
