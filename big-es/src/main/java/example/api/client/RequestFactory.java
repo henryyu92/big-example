@@ -1,4 +1,7 @@
 package example.api.client;
 
-public class RequestFactory {
+@FunctionalInterface
+public interface RequestFactory<T> {
+
+    public T getRequest();
 }

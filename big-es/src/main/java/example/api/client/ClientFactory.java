@@ -4,7 +4,7 @@ import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 
-public class EsClientFactory {
+public class ClientFactory {
 
     public static RestHighLevelClient restHighLevelClient(){
         return new RestHighLevelClient(
