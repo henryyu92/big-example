@@ -1,11 +1,13 @@
 package example.api.indices;
 
 import example.api.client.ClientFactory;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.support.ActiveShardCount;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.indices.CreateIndexRequest;
+import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 
@@ -36,6 +38,19 @@ public class IndicesApi {
 
         client.indices().create(request, options);
 
+        // 异步提交
+        client.indices().createAsync(request, options, new ActionListener<CreateIndexResponse>() {
+            @Override
+            public void onResponse(CreateIndexResponse createIndexResponse) {
+
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+
+            }
+        });
+
     }
 
     /**
@@ -52,6 +67,22 @@ public class IndicesApi {
      * @param name
      */
     public void updateIndices(String name){
+
+    }
+
+    /**
+     * open 索引
+     * @param name
+     */
+    public void openIndices(String name){
+
+    }
+
+    /**
+     * close 索引
+     * @param name
+     */
+    public void closeIndices(String name){
 
     }
 }
