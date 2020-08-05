@@ -21,9 +21,6 @@ public class IndicesApi {
         client = ClientFactory.restHighLevelClient();
     }
 
-    /**
-     * 创建索引
-     */
     public void addIndices(String name) throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(name);
 
@@ -53,35 +50,19 @@ public class IndicesApi {
 
     }
 
-    /**
-     * 删除索引
-     * @param name
-     */
     public void deleteIndices(String name){
 
     }
 
 
-    /**
-     * 更新索引
-     * @param name
-     */
     public void updateIndices(String name){
 
     }
 
-    /**
-     * open 索引
-     * @param name
-     */
     public void openIndices(String name){
 
     }
 
-    /**
-     * close 索引
-     * @param name
-     */
     public void closeIndices(String name){
 
     }
