@@ -88,3 +88,52 @@ ES中的数据可以分为两类：精确值和全文，精确值，比如日期
 - 对匹配到的文档列表进行相关性评分，评分策略一般使用TF/IDF；
 - 根据评分结果进行排序。
 
+ES目前有两种搜索类型：DFS_QUERY_THEN_FETCH；QUERY_THEN_FETCH（默认）。两种不同的搜索类型的区别在于查询阶段，DFS查询阶段的流程要多一些，它使用全局信息来获取更准确的评分。
+
+
+
+一个搜索请求必须询问请求的索引中所有分片的某个副本来进行匹配。假设一个索引有5个主分片，每个主分片有1个副分片，共10个分片，一次搜索请求会由5个分片来共同完成，它们可能是主分片，也可能是副分片。也就是说，一次搜索请求只会命中所有分片副本中的一个。
+
+
+
+#### 协调节点流程
+
+两阶段相应的实现位置：查询（Query）阶段—search.InitialSearchPhase；取回（Fetch）阶段—search.FetchSearchPhase。
+
+- Query阶段：在初始查询阶段，查询会广播到索引中每一个分片副本（主分片或副分片）。每个分片在本地执行搜索并构建一个匹配文档的优先队列。优先队列是一个存有topN匹配文档的有序列表。优先队列大小为分页参数from +size。QUERY_THEN_FETCH搜索类型的查询阶段步骤如下：
+  - 客户端发送search请求到NODE 3。
+  - Node 3将查询请求转发到索引的每个主分片或副分片中。
+  - 每个分片在本地执行查询，并使用本地的Term/Document Frequency信息进行打分，添加结果到大小为from + size的本地有序优先队列中。
+  - 每个分片返回各自优先队列中所有文档的ID和排序值给协调节点，协调节点合并这些值到自己的优先队列中，产生一个全局排序后的列表。
+
+协调节点广播查询请求到所有相关分片时，可以是主分片或副分片，协调节点将在之后的请求中轮询所有的分片副本来分摊负载。查询阶段并不会对搜索请求的内容进行解析，无论搜索什么内容，只看本次搜索需要命中哪些shard，然后针对每个特定shard选择一个副本，转发搜索请求。
+
+Query 阶段流程的线程池：http_server_work。
+
+1. 解析请求在RestSearchAction#prepareRequest方法中将请求体解析为SearchRequest数据结构
+2. 构造目的shard列表将请求涉及的本集群shard列表和远程集群的shard列表（远程集群用于跨集群访问）合并
+3. 遍历所有shard发送请求请求是基于shard遍历的，如果列表中有N个shard位于同一个节点，则向其发送N次请求，并不会把请求合并为一个。shardsIts为本次搜索涉及的所有分片，shardRoutings.nextOrNull（）从某个分片的所有副本中选择一个，例如，从website中选择主分片。转发请求同时定义一个Listener，用于处理Response
+4. 收集返回结果本过程在search线程池中执行。onShardSuccess对收集到的结果进行合并。successfulShardExecution方法检查是否所有请求都已收到回复，是否进入下一阶段。onPhaseDone会调用executeNextPhase，从而开始执行取回阶段
+
+
+
+Query阶段知道了要取哪些数据，但是并没有取具体的数据，这就是Fetch阶段要做的。Fetch阶段由以下步骤构成：
+
+- 协调节点向相关NODE发送GET请求
+- 分片所在节点向协调节点返回数据
+- 协调节点等待所有文档被取得，然后返回给客户端
+
+分片所在节点在返回文档数据时，处理有可能出现的_source字段和高亮参数。协调节点首先决定哪些文档“确实”需要被取回，例如，如果查询指定了{＂from＂: 90, ＂size＂:10 }，则只有从第91个开始的10个结果需要被取回。为了避免在协调节点中创建的number_of_shards * （from + size）优先队列过大，应尽量控制分页深度。
+
+
+
+Fetch阶段的目的是通过文档ID获取完整的文档内容。执行本流程的线程池：search。
+
+- 发送Fetch请求。Query阶段的executeNextPhase方法触发Fetch阶段，Fetch阶段的起点为FetchSearchPhase# innerRun函数，从查询阶段的shard列表中遍历，跳过查询结果为空的shard，对特定目标shard执行executeFetch来获取数据，其中包括分页信息。对scroll请求的处理也在FetchSearchPhase# innerRun函数中。executeFetch的参数querySearchResult中包含分页信息，最后定义一个Listener，每成功获取一个shard数据后就执行counter.onResult，其中调用对结果的处理回调，把result保存到数组中，然后执行countDown。
+- 收集结果。收集器的定义在innerRun中，包括收到的shard数据存放在哪里，收集完成后谁来处理。fetchResults 用于存储从某个 shard 收集到的结果，每收到一个 shard 的数据就执行一次counter.countDown（）。当所有shard数据收集完毕后，countDown会出触发执行finishPhase。moveToNextPhase方法执行下一阶段，下一阶段要执行的任务定义在FetchSearchPhase构造函数中，主要是触发ExpandSearchPhase。
+- ExpandSearchPhase。取回阶段完成之后执行ExpandSearchPhase#run，主要判断是否启用字段折叠，根据需要实现字段折叠功能，如果没有实现字段折叠，则直接返回给客户端。
+- 回复客户端。ExpandSearchPhase执行完之后回复客户端，在sendResponsePhase方法中实现。
+
+#### 数据节点流程
+
+执行搜索的数据节点流程的线程池：search。
