@@ -43,44 +43,6 @@ Elasticsearch 的对外提供的 API 是以 HTTP 协议的方式通过 JSON 格�
 - human - 当在请求中添加参数 human=true 时，返回结果的统计数据更适合人类阅读，默认是 false
 - filter_path - 请求中添加参数 filter_path=content 时，可以过来返回值的内容，多个值支持 , 隔开和通配符；如 ``` curl -X GET HTTP '127.0.0.1:9200/_search?pretty=true&filter_path=took,hits._id,hits._score'```
 ## 索引
-索引是具有相同结构的文档集合，对 Elasticsearch 的大部分操作都是基于索引来完成的。
-### 索引管理
-#### 创建索引
-创建索引的时候可以通过 number_of_shards 和 number_of_replicas 参数指定索引的分片和副本数量；默认情况下分片的数量是5，副本的数量是1。
-```json
-
-PUT http://ip:port/index/
-
-{
-    "settings":{
-        "index":{
-            "number_of_shards":3,
-            "number_of_replicas":2
-        }
-    }
-}
-```
-#### 删除索引
-删除索引需要指定索引名或者通配符，删除多个索引可以使用逗号(,)分隔或者使用 _all 或者 * 删除全部索引；为了防止误删除，可以设置 elasticsearch.yml 中 action.destructive_require_nam 属性为 true，禁止使用通配符或者 _all 删除索引，必须使用索引名称或者别名才能删除索引。
-```json
-DELETE http://ip:port/index/
-```
-#### 获取索引
-获取索引会把系统中的信息都显示出来，包括一些默认的配置；获取索引需要指定索引名称，或者使用通配符获取多个索引，或者使用 _all 或 * 获取全部索引；如果索引不存在则返回一个错误内容。
-```json
-GET http://ip:port/index/
-```
-获取索引的时候可以指定返回特定的属性，多个属性使用逗号(,) 隔开，可指定的属性包括 _settings、_mappings、_warmers 和 _aliases。
-```json
-GET http://ip:port/index/_settings,_mappings,_warmers,_aliases
-```
-#### 打开/关闭索引
-关闭的索引只能显示索引元数据信息，不能够进行读写操作；打开/关闭索引可以控制索引是否打开或关闭。
-```json
-POST http://ip:port/index/_open     打开索引
-POST http://ip:port/index/_close    关闭索引
-```
-关闭的索引会继续占用磁盘空间而不能使用，所以关闭索引接口会造成磁盘空间的浪费，设置 settingscluster.indicices.close.enabled=false 即可禁止使用关闭索引功能，默认是 true。
 ### 索引映射管理
 创建文档的时候如果没有指定索引参数，系统会自动判断每个维度的类型。
 #### 增加映射
@@ -113,23 +75,6 @@ GET http://{ip:port}/{index}/{type}/_mapping/field/{field}
 #### 判断类型是否存在
 ```
 HEAD http://{ip:port}/{index}/{type}
-```
-### 索引别名
-Elasticsearch 可以对索引指定别名，通过别名可以查询到一个或多个索引的内容。在 Elasticsearch 内部别名会自动映射到索引上，可以针对别名设置过滤器或者路由，别名不能重复也不能和其他索引别名重复。
-#### 增加索引别名
-```
-POST http://{ip:port}/_aliases
-
-{
-    "actions":[
-	    {
-		    "add":{
-			    "index":"{index_name}",
-				"alias":"{alias_name}"
-			}
-		}
-	]
-}
 ```
 ### 索引配置
 ### 索引监控
