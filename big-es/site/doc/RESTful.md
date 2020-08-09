@@ -12,6 +12,7 @@ ES 提供了 RESTful API 用于操作索引和文档。
 > tips:
 >
 > - 在请求中加入  `pretty`  参数可以使得返回的结果是 Json 格式的，便于阅读
+> - 在请求中加入 v 参数可以
 
 ### 集群
 
@@ -76,7 +77,7 @@ curl -X GET 'ip:port/indices_name?pretty'
 curl -X GET 'ip:port/_all?pretty'
 ```
 
-获取到的索引包含索引的  `mappings`, `settings`  和 `aliases` 信息，在查看索引是可以单独指定获取到的信息。
+获取到的索引包含索引的  `mapping`, `setting`  和 `alias` 信息，在查看索引是可以单独指定获取到的信息。
 
 ```sh
 # 获取索引的 settings 信息
@@ -87,6 +88,13 @@ curl -X GET 'ip/port/indices_name/_mapping?pretty'
 
 # 获取索引的 aliases 信息
 curl -X GET 'ip/port/indices_name/_alias?pretty'
+```
+
+查看索引中的文档
+
+```sh
+# 查看索引的文档总数
+curl -X GET 'ip:port/indices_name/_count?v'
 ```
 
 
@@ -145,3 +153,25 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 #### 索引监控
 
 ### 文档
+
+文档具有版本信息，每次对文档的修改都会使得版本号增加 1
+
+#### 创建文档
+
+创建文档使用 `POST` 方法
+
+```sh
+# 不指定 id
+curl -H "Content-Type:application/json" -X POST 'ip:port/doc_name' -d '{
+	"field": "value"
+}'
+
+# 指定 id
+
+```
+
+#### 更新文档
+
+#### 获取文档
+
+### Bulk API
