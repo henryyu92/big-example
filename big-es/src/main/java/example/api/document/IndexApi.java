@@ -3,11 +3,13 @@ package example.api.document;
 import example.api.client.ClientFactory;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.admin.indices.alias.Alias;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.support.ActiveShardCount;
 import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -27,7 +29,7 @@ import java.util.Map;
 
 public class IndexApi {
 
-    private RestHighLevelClient client;
+    private final RestHighLevelClient client;
 
     public IndexApi(){
         client = ClientFactory.restHighLevelClient();
@@ -36,7 +38,9 @@ public class IndexApi {
     public void addIndices(String name) throws IOException {
         CreateIndexRequest request = new CreateIndexRequest(name);
 
-        request.settings(Settings.builder().put("index.number_of_shards", 3).put("index.number_of_replicas", 2));
+        request.settings(Settings.builder()
+                .put("index.number_of_shards", 3)
+                .put("index.number_of_replicas", 2));
 
         request.alias(new Alias("test"));
         request.setTimeout(TimeValue.timeValueMinutes(10));
@@ -84,14 +88,30 @@ public class IndexApi {
         });
     }
 
+    private void processResponse(IndexResponse response){
+        // 索引
+        String index = response.getIndex();
+        // 文档 ID
+        String id = response.getId();
+        // Index 操作结果(创建或者修改)
+        DocWriteResponse.Result result = response.getResult();
+
+        // 请求对应的分片处理信息
+        ReplicationResponse.ShardInfo shardInfo = response.getShardInfo();
+        // 成功处理请求的分片
+        int successful = shardInfo.getSuccessful();
+        // 处理请求失败的分片
+        ReplicationResponse.ShardInfo.Failure[] failures = shardInfo.getFailures();
+    }
+
     private IndexRequest indexRequest(String index, DocWriteRequest.OpType opType){
         IndexRequest request = Requests.indexRequest(index)
                 .id("1")
                 .routing("routing")
                 .timeout(TimeValue.timeValueSeconds(1))
                 .setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL)
-//                .version(2)
                 .versionType(VersionType.INTERNAL)
+//                .version(2)
                 .opType(opType)
 //                .setPipeline("pipeline")
                 ;
