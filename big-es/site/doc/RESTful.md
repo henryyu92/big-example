@@ -16,6 +16,20 @@ ES 提供了 RESTful API 用于操作索引和文档。
 
 ### 集群
 
+#### 集群节点
+
+通过 `/_nodes`  可以查看集群的节点信息，查看集群节点信息请求支持多种过滤方式，默认返回所有节点的信息：
+
+```sh
+# 查看集群所有节点
+curl -X GET 'ip:port/_nodes'
+
+# 查看 master 角色的节点信息
+curl -X GET 'ip:port/_nodes/_master'
+```
+
+
+
 查看集群状态
 
 ```sh
@@ -156,7 +170,7 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 
 文档具有版本信息，每次对文档的修改都会使得版本号增加 1
 
-#### 创建文档
+#### 索引文档
 
 创建文档使用 `POST` 方法
 
@@ -170,8 +184,8 @@ curl -H "Content-Type:application/json" -X POST 'ip:port/doc_name' -d '{
 
 ```
 
-#### 更新文档
-
 #### 获取文档
+
+### _cat
 
 ### Bulk API

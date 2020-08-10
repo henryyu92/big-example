@@ -4,4 +4,11 @@ package example.api.client;
 public interface RequestFactory<T> {
 
     public T getRequest();
+
+    // IndexRequest
+    // DeleteRequest
+    // BulkRequest
+    // GetRequest
+    // SearchRequest
+    // SearchScrollRequest
 }
