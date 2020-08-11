@@ -35,37 +35,6 @@ public class IndexApi {
         client = ClientFactory.restHighLevelClient();
     }
 
-    public void addIndices(String name) throws IOException {
-        CreateIndexRequest request = new CreateIndexRequest(name);
-
-        request.settings(Settings.builder()
-                .put("index.number_of_shards", 3)
-                .put("index.number_of_replicas", 2));
-
-        request.alias(new Alias("test"));
-        request.setTimeout(TimeValue.timeValueMinutes(10));
-        request.setMasterTimeout(TimeValue.timeValueMinutes(30));
-        request.waitForActiveShards(ActiveShardCount.from(2));
-
-        RequestOptions options = RequestOptions.DEFAULT;
-
-        client.indices().create(request, options);
-
-        // 异步提交
-        client.indices().createAsync(request, options, new ActionListener<CreateIndexResponse>() {
-            @Override
-            public void onResponse(CreateIndexResponse createIndexResponse) {
-
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-
-            }
-        });
-
-    }
-
     public void addDoc() throws IOException {
 
         IndexRequest request = indexRequest("posts", DocWriteRequest.OpType.INDEX);
