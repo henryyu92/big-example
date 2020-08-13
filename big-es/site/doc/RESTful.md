@@ -172,19 +172,52 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 
 #### 索引文档
 
-创建文档使用 `POST` 方法
+索引文档有 `Put`  和  `POST` 两种方式，使用 `PUT` 时如果文档已经存在则会先删除文档然后创建新的文档，而 `POST` 方式在文档存在时会失败。 
 
 ```sh
-# 不指定 id
-curl -H "Content-Type:application/json" -X POST 'ip:port/doc_name' -d '{
+# 使用 PUT 方法
+curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/doc_name/doc_id' -d '{
+	"field":"value"
+}'
+
+# 使用 POST 方法，不指定文档 ID 则自动生成 ID
+curl -H "Content-Type:application/json" -X POST 'ip:port/index_name/doc_name' -d '{
 	"field": "value"
 }'
 
-# 指定 id
-
+# 使用 POST 方法，指定文档 ID
+curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/doc_name/doc_id' 
+-d '{
+	"field": "value"
+}'
 ```
 
 #### 获取文档
+
+获取文档使用 `GET` 方法，获取单个文档需要指定文档 ID
+
+```sh
+curl -X GET 'ip:port/index_name/doc_name/doc_id'
+```
+
+#### 修改文档
+
+修改文档使用 `POST` 方法，被修改的文档必须已经存在，且只修改对应的字段
+
+```sh
+curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/doc_name/doc_id' 
+-d '{
+	"field": "value"
+}'
+```
+
+#### 删除文档
+
+删除文档使用 `DELETE` 方法，删除文档时需要指定文档的 ID
+
+```sh
+curl -X DELETE 'ip:port/index_name/doc_name/doc_id'
+```
 
 ### _cat
 
