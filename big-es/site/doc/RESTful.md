@@ -12,7 +12,6 @@ ES 提供了 RESTful API 用于操作索引和文档。
 > tips:
 >
 > - 在请求中加入  `pretty`  参数可以使得返回的结果是 Json 格式的，便于阅读
-> - 在请求中加入 v 参数可以
 
 ### 集群
 
@@ -162,7 +161,7 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 
 #### Mapping
 
-
+#### Setting
 
 #### 索引监控
 
@@ -186,6 +185,42 @@ curl -H "Content-Type:application/json" -X POST 'ip:port/doc_name' -d '{
 
 #### 获取文档
 
-### _cat
+### cat
+
+cat API 接受一个查询字符串参数，用于帮助查看它们提供的所有信息。`/_cat` 命令可以查看所有可用的命令。
+
+```sh
+curl -X GET 'ip:port/_cat?pretty'
+
+# 查看 Master 节点信息
+curl -X GET 'ip:/port/_cat/master?v&pretty'
+```
+
+#### 集群状态
+
+`/_cat/health`：返回集群的健康状态
+
+#### 节点信息
+
+`/_cat/nodes`：返回集群节点的相关信息，返回的信息包括
+
+
+
+`/_cat/master`：返回主节点的信息 
+
+#### 索引信息
+
+`/_cat/indices`：返回集群中索引的信息
+
+
+
+`/_cat/alias` 别名信息
+
+#### 分片信息
+
+`/_cat/shards`：返回集群中索引的分片信息
 
 ### Bulk API
+
+### Search API
+
