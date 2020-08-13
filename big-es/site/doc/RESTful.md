@@ -2,13 +2,6 @@
 
 ES 提供了 RESTful API 用于操作索引和文档。
 
-> - GET
-> - PUT
-> - POST
-> - DELETE
-
-
-
 > tips:
 >
 > - 在请求中加入  `pretty`  参数可以使得返回的结果是 Json 格式的，便于阅读
@@ -171,21 +164,21 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 
 #### 索引文档
 
-索引文档有 `Put`  和  `POST` 两种方式，使用 `PUT` 时如果文档已经存在则会先删除文档然后创建新的文档，而 `POST` 方式在文档存在时会失败。 
+索引文档有 `Put`  和  `POST` 两种方式，使用 `PUT` 方法需要指定文档 ID，而使用 `POST` 方法在没有指定 ID 时会自动生成 ID。如果索引不存在则会在创建文档的时候自动创建，如果文档不存在会自动创建文档，如果文档存在则会删除文档后重新创建文档并且文档版本号加 1。
 
 ```sh
 # 使用 PUT 方法
-curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/doc_name/doc_id' -d '{
+curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/doc_id' -d '{
 	"field":"value"
 }'
 
 # 使用 POST 方法，不指定文档 ID 则自动生成 ID
-curl -H "Content-Type:application/json" -X POST 'ip:port/index_name/doc_name' -d '{
+curl -H "Content-Type:application/json" -X POST 'ip:port/index_name/' -d '{
 	"field": "value"
 }'
 
 # 使用 POST 方法，指定文档 ID
-curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/doc_name/doc_id' 
+curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_create/doc_id' 
 -d '{
 	"field": "value"
 }'
@@ -197,6 +190,14 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/doc_name/doc
 
 ```sh
 curl -X GET 'ip:port/index_name/doc_id'
+```
+
+
+
+获取文档时可以使用 `_source` 来仅查看文档的源或者验证文档是否存在
+
+```sh
+curl -X GET 'ip:port/_source/doc_id?pretty'
 ```
 
 #### 修改文档
