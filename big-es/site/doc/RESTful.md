@@ -164,20 +164,27 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 
 #### 索引文档
 
-索引文档有 `Put`  和  `POST` 两种方式，使用 `PUT` 方法需要指定文档 ID，而使用 `POST` 方法在没有指定 ID 时会自动生成 ID。如果索引不存在则会在创建文档的时候自动创建，如果文档不存在会自动创建文档，如果文档存在则会删除文档后重新创建文档并且文档版本号加 1。
+索引文档有 `Put`  和  `POST` 两种方式，使用 `PUT` 方法需要指定文档 ID，而使用 `POST` 方法在没有指定 ID 时会自动生成 ID，如果索引不存在则会在创建文档的时候自动创建。
+
+使用 `_create` 则明确表示创建文档，如果文档已经存在则会返回错误；使用 `_doc` 时如果文档不存在会自动创建文档，如果文档存在则会删除文档后重新创建文档(文档字段会发生变化)并且文档版本号加 1。
 
 ```sh
-# 使用 PUT 方法
-curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/doc_id' -d '{
+# 使用 PUT 方法，如果文档存在则会删除后创建
+curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/_doc/doc_id' -d '{
 	"field":"value"
 }'
 
-# 使用 POST 方法，不指定文档 ID 则自动生成 ID
-curl -H "Content-Type:application/json" -X POST 'ip:port/index_name/' -d '{
+# 使用 PUT 方法创建文档，文档存在则返回错误
+curl -H 'Content-Type:application/json' -X PUT 'ip:port/index_name/_create/doc_id' -d '{
 	"field": "value"
 }'
 
-# 使用 POST 方法，指定文档 ID
+# 使用 POST 方法，不指定文档 ID 则自动生成 ID
+curl -H "Content-Type:application/json" -X POST 'ip:port/index_name/_doc' -d '{
+	"field": "value"
+}'
+
+# 使用 POST 方法，指定文档 ID，文档存在会返回错误
 curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_create/doc_id' 
 -d '{
 	"field": "value"
@@ -189,34 +196,42 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_create/doc_
 获取文档使用 `GET` 方法，获取单个文档需要指定文档 ID
 
 ```sh
-curl -X GET 'ip:port/index_name/doc_id'
+curl -X GET 'ip:port/index_name/_doc/doc_id'
 ```
 
-
-
-获取文档时可以使用 `_source` 来仅查看文档的源或者验证文档是否存在
+获取文档时可以使用 `_source` 来仅查看文档的源
 
 ```sh
 curl -X GET 'ip:port/_source/doc_id?pretty'
 ```
 
-#### 修改文档
-
-修改文档使用 `POST` 方法，被修改的文档必须已经存在，且只修改对应的字段
+使用 `HEAD` 方法可以判断文档是否存在
 
 ```sh
-curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/doc_name/doc_id' 
+curl -X HEAD 'ip:port/index/_doc/doc_id'?pretty=true
+```
+
+#### 修改文档
+
+修改文档使用 `POST` 方法，被修改的文档必须已经存在且文档中有对应的字段。
+
+```sh
+curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_update/doc_id' 
 -d '{
-	"field": "value"
+	"doc"{
+		"field": "value"
+	}
 }'
 ```
+
+修改文档还支持脚本修改，使用脚本修改可能
 
 #### 删除文档
 
 删除文档使用 `DELETE` 方法，删除文档时需要指定文档的 ID
 
 ```sh
-curl -X DELETE 'ip:port/index_name/doc_name/doc_id'
+curl -X DELETE 'ip:port/index_name/_doc/doc_id'
 ```
 
 ### _cat
