@@ -1,5 +1,6 @@
-package example.api;
+package example.api.admin;
 
+import example.api.BaseApi;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
@@ -11,6 +12,8 @@ import java.util.Map;
 
 /**
  * HBase Table API
+ *
+ * Table 是线程不安全的，每个线程需要独立创建 Table，HBase 创建 Table 时需要指定 ColumnFamily
  */
 public class TableApi extends BaseApi {
 

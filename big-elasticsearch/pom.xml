@@ -10,7 +10,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>big-es</artifactId>
+    <artifactId>big-elasticsearch</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>

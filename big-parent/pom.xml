@@ -7,9 +7,6 @@
     <groupId>org.mooc.big.example</groupId>
     <artifactId>big-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <modules>
-        <module>../big-zookeeper</module>
-    </modules>
     <packaging>pom</packaging>
 
     <properties>
@@ -28,6 +25,8 @@
         <jdbc-version>8.0.18</jdbc-version>
         <pulsar.version>2.5.1</pulsar.version>
         <elasticsearch.version>7.7.1</elasticsearch.version>
+
+        <junit.version>4.12</junit.version>
     </properties>
 
     <repositories>
@@ -43,6 +42,13 @@
 
     <dependencyManagement>
         <dependencies>
+
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
 
             <!-- Scala -->
             <dependency>
@@ -169,6 +175,4 @@
             </plugins>
         </pluginManagement>
     </build>
-
->>>>>>> 36b8f23a7f8668805ccaca8084cc904746ae7d7b
 </project>

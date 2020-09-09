@@ -4,31 +4,40 @@ import example.api.BaseApi;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 表的创建、修改、全限操作由 Master 处理
  */
-public class TableAdmin extends BaseApi {
+public class AdminApi extends BaseApi {
 
 
-    public TableAdmin() throws IOException {
+    public AdminApi() throws IOException {
         super();
     }
 
-    public TableAdmin(Configuration conf) throws IOException {
+    public AdminApi(Configuration conf) throws IOException {
         super(conf);
     }
 
 
-    public void createTable(String tableName) {
+    public void createTable(String tableName, String... columnFamilyName) {
         Connection conn = getConnection();
 
         try(Admin admin = conn.getAdmin()){
+
+
+
             TableDescriptor tableDescriptor = TableDescriptorBuilder
                     .newBuilder(TableName.valueOf(tableName))
-                    .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder("cf".getBytes()).build())
+                    .setColumnFamilies(Stream.of(columnFamilyName).map(familyName ->
+                        ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes(familyName)).build())
+                            .collect(Collectors.toList()))
                     .setCompactionEnabled(true)
                     .build();
 
@@ -37,15 +46,13 @@ public class TableAdmin extends BaseApi {
 
         }
 
-
-
     }
 
     /**
      * 查看表的描述信息
      * @param tableName
      */
-    public void describe(String tableName){
+    public TableDescriptor describe(String tableName){
         Connection conn = getConnection();
 
         try(Admin admin = conn.getAdmin()){
@@ -54,8 +61,11 @@ public class TableAdmin extends BaseApi {
 
             System.out.println(descriptor);
 
+            return descriptor;
+
         }catch (IOException e){
 
+            return null;
         }
     }
 }
