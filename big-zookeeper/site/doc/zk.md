@@ -1,20 +1,65 @@
 ## ZooKeeper
 
-## ZooKeeper 设计目标
-- **简单** - ZooKeeper允许分布式进程通过共享的层级命名空间相互协调，该命名空间与标准文件系统类似地组织。名称空间由数据寄存器组成 - 在ZooKeeper中称为znodes - 这些与文件和目录类似。与专为存储而设计的典型文件系统不同，<strong>ZooKeeper数据保存在内存中，这意味着ZooKeeper可以实现高吞吐量和低延迟数量。</strong>。ZooKeeper 的实现非常重视高性能，高可用性，严格有序的访问；ZooKeeper的性能方面意味着它可以在大型分布式系统中使用，可靠性方面使其不会成为单点故障，严格的排序意味着可以在客户端实现复杂的同步原语
-- **多副本** - 与它协调的分布式进程一样，ZooKeeper本身也可以在称为集合的一组主机上进行复制。组成ZooKeeper服务的服务器必须彼此了解。它们维护内存中的状态图像，以及持久性存储中的事务日志和快照。 <strong>只要大多数服务器可用，ZooKeeper服务就可用。</strong>客户端连接到单个ZooKeeper服务器。 客户端维护TCP连接，通过该连接发送请求，获取响应，获取监视事件以及发送心跳。 如果与服务器的TCP连接中断，则客户端将连接到其他服务器
-- **有序** - ZooKeeper使用反映所有ZooKeeper事务顺序的数字标记每个更新。 后续操作可以使用该顺序来实现更高级别的抽象，例如同步原语
-- **快速** - ZooKeeper在“读取主导”工作负载中特别快。 ZooKeeper应用程序在数千台计算机上运行，并且在读取比写入更常见的情况下表现最佳，比率大约为10：1。
-## Zookeeper 保证
-- 顺序一致性(Sequential Consistency) - 客户端的更新将按发送顺序应用
-- 原子性(Atomicity) - 更新成功或失败，没有部分结果
-- 单系统映像(Single System Image) - 无论服务器连接到哪个服务器，客户端都将看到相同的服务视图
-- 可靠性(Reliability) - 应用更新后，它将从该时间开始持续，直到客户端覆盖更新
-- 低延时(Timeliness) - 系统的客户端视图保证在特定时间范围内是最新的
-## Zookeeper 数据模型
-ZooKeeper有一个分层名称空间，很像分布式文件系统,唯一的区别是命名空间中的每个节点都可以包含与之关联的数据以及子节点,这就像拥有一个既可以是文件也可以是目录的文件系统。
-### ZNodes
-ZooKeeper 树形结构中的每个节点都称为 Znode。Znodes 维护一个 stat 结构，包含数据版本，时间戳等，版本号与时间戳一起允许ZooKeeper验证缓存并协调更新；每次数据修改时数据版本就会加 1，客户端查询数据时也会接收数据的版本；当客户端执行更新或删除时，它必须提供正在更改的znode的数据版本。 如果它提供的版本与实际版本的数据不匹配，则更新将失败。
+ZooKeeper 是一个用于分布式应用的高性能协调服务，以简单的接口提供了命名、配置管理、同步和组管理等服务，利用这些服务可以实现一致性、组管理、leader 选举等功能。
+
+作为一个分布式协调服务，ZooKeeper 具有如下特性：
+
+- **简单**：ZooKeeper允许分布式进程通过共享的层级命名空间相互协调，该命名空间与标准文件系统类似地组织。命名空间由 Znode 组成，这些 Znode 与文件和目录类似，和用于存储的文件系统不同，ZooKeeper 的数据存储在内存中，这使得 ZooKeeper 可以实现高吞吐和低延迟
+- **多副本**：与其协调的分布式进程一样，ZooKeeper 本身也可以在集群中的主机间复制。ZooKeeper 集群中的节点在内存中维护了数据状态的镜像，并且持久化存储了事务日志和快照。客户端和集群中的一个节点建立 TCP 连接，并通过这个连接发送请求、接收响应、监听事件以及发送心跳
+- **有序**：ZooKeepr 为每个更新操作增加代表事务顺序的编号，后续的操作可以使用这个顺序实现更加高级别的抽象，例如同步原语
+- **快速**：ZooKeeper 非常适合读多写少的负载情况，在读写比大概 10:1 的情况下性能最好
+
+ZooKeeper的性能方面意味着它可以在大型分布式系统中使用，可靠性方面使其不会成为单点故障，严格的排序意味着可以在客户端实现复杂的同步原语。
+
+ZooKeeper 非常简单且快速，作为构建复杂服务的基础服务，其提供了一系列的保证：
+
+- 顺序一致性(Sequential Consistency)：客户端的更新操作将按照发送的顺序执行
+- 原子性(Atomicity)：更新操作要么成功，要么失败，没有中间状态
+- 单系统映像(Single System Image)：无论客户端连接到那个服务器，看到的都是相同的视图，也就是说即使客户端在同一会话中由于服务器故障而转移到其他服务器，也不会看到旧的系统视图
+- 可靠性(Reliability)：一旦更新操作执行，数据会一直存在知道下一次的更新覆盖
+- 低延时(Timeliness)：系统保证在一定时间范围内的延迟后，客户端能够看到最新的数据
+
+### 组件
+
+ZooKeeper 服务包含三个组件：请求处理器(Request Processor)、原子广播器(Atomic Broadcast) 和 副本数据库(Replicated Database)。
+
+![Component](../resources/component.png)
+
+副本数据库是一个内存数据库，它包含了整个树形结构的数据，更新操作会以日志的方式记录到磁盘用于恢复，而写操作则会在应用到内存数据库之前序列化到磁盘。
+
+客户端可以连接任意一个 ZooKeeper 服务器，并通过连接的服务器发送请求。读请求的数据由每个服务器关于内存数据库的本地副本提供，更改状态的请求和写请求则需要通过协议来处理。
+
+ZooKeeper 服务器集群包含一个 leader 节点和多个 follower 节点，客户端的写请求都会被转发到 leader 节点，leader 节点将处理结果广播给所有的 follower 节点并达成一致从而完成写操作。
+
+ZooKeeper 使用自定义的原子消息传递协议，原子消息使得 ZooKeeper 可以保证本地副本的一致性。当 leader 接收到一个写请求时会计算出请求执行后系统的状态，并将其转换成一个事务来捕获这个新状态。
+
+
+
+ZooKeeper 提供了非常简单易用的编程接口，其支持如下操作：
+
+- `create`：在数据树中创建一个节点
+- `delete`：删除数据树中的一个节点
+- `exists`：判断节点是否存在
+- `get`：获取节点包含的数据
+- `set`：写数据到一个节点
+- `children`：获取一个节点的子节点列表
+- `sync`：同步数据
+
+### 数据模型
+ZooKeeper 提供的分层名称空间很像分布式文件系统，命名空间的名称是由斜杠(/) 分隔的路径序列。与文件系统不同的是，ZooKeeper 命名空间中的每个节点都可以包含与之关联的数据以及子节点，这就像一个既可以是文件也可以是目录的文件系统。
+
+ZooKeeper 设计用于存储协调数据，如状态信息、配置、位置信息等，因此存储在每个节点的数据通常很小(1M 以内)，ZooKeeper 的数据节点称为 Znode。
+
+#### ZNode
+ZooKeeper 树形结构中的节点称为 Znode，其维护一个 stat 结构，包含数据更改的版本号、ACL 更改和时间戳等信息用于缓存验证以及协调更新。
+
+每次 Znode 更新数据时，版本号都会增加，在客户端获取数据的同时也会获取到数据的版本号，当客户端执行更新或者删除操作时必须提供当前 Znode 的版本号，如果版本号不匹配则更新失败。
+
+Znode 的读写是原子的，读操作获取 Znode 的全部数据，写操作将会覆盖所有的原始数据，每个数据节点都有一个访问控制列表(ACL) 用于权限控制。
+
+
+
+
 
 ZNodes 作为 ZooKeeper 的主要实体，有很多特性：
 - Watches - 客户端可以在 ZNodes 上设置 watches，对该znode的更改会触发并清除 watch，当 watch 触发时，ZooKeeper会向客户端发送通知。
@@ -24,13 +69,13 @@ ZNodes 作为 ZooKeeper 的主要实体，有很多特性：
 - Container Nodes - Zookeeper 有容器节点的概念。容器节点是一种特殊的 Znodes，当容器节点的最后一个子节点被删除后，该节点将会在之后被删掉。基于容器节点的这种特性，当在容器节点中创建子节点时需要捕获 KeeperException.NoNodeException 并在捕获之后重新创建容器节点。
 - TTL Nodes - 在创建 PERSISTENT 或者 PERSISTENT_SEQUENTIAL 节点时，还可以为这些节点设置以毫秒为单位的 TTL，如果该节点没有修改 TTL 并且没有子节点，则会在到期后删除该节点。TTL 节点必须在系统属性中设置启用才能使用，默认是禁止的，如果没有启动就创建的话会抛出 KeeperException.UnimplementedException
 
-### Zookeeper 中的时间
+#### 时间
 - **Zxid** - 对ZooKeeper状态的每次更改都会以zxid（ZooKeeper Transaction Id）的形式标记，这暴露了ZooKeeper所有更改的总排序。每个更改都有一个唯一的zxid，如果zxid1小于zxid2，则zxid1发生在zxid2之前
 - **Version numbers** - 对节点的每次更改都会导致该节点的某个版本号增加。 三个版本号是version（znode数据的更改次数），cversion（znode 子节点的更改次数）和aversion（znode的ACL更改次数）
 - **Ticks** - 当使用多服务器ZooKeeper时，服务器使用 ticks 来定义事件的时间，例如状态上载，会话超时，节点之间的连接超时等。tick 时间仅通过最小会话超时（tick 时间的2倍）间接暴露; 如果客户端请求的会话超时小于最小会话超时，则服务器将告诉客户端会话超时实际上是最小会话超时
 - **Real time** - 除了在znode创建和znode修改时将时间戳放入stat结构之外，ZooKeeper根本不使用实时或时钟时间
 
-### Zookeeper Stat 结构
+#### Stat
 - czxid：Znode 创建时的 Zxid
 - mzxid：修改此znode时的zxid
 - pzxid：修改此znode的子节点时的zxid
@@ -43,9 +88,14 @@ ZNodes 作为 ZooKeeper 的主要实体，有很多特性：
 - dataLength：此znode的数据字段的长度
 - numChildren：此znode的子节点数
 
-## Zookeeper 会话
+### Watch
 
-## Zookeeper Watches
+ZooKeeper 支持 watch 的概念，客户端可以在 znode 上设置 watch，当 znode 上 watch 的事件触发时，客户端会收到一个通知 znode 发生改变的数据包。
+
+znode 上设置的 watch 是一次性的，也就是在触发之后就被删除，客户端需要重新设置 watch 才会继续监听。*3.6.0 版本提供了一个新的特性，即客户端可以在 znode 上设置永久的、递归的 watch，这些  watch 在触发后不会被删除*
+
+
+
 当设置了 Watch 的节点的数据变更，就会触发一次性的 Watch 事件并发送给设置该 Watch 的客户端。Zookeeper 的所有读操作(如 getData, getChildren, exists)都可以对节点设置 Watch。
 
 Watches 在 ZooKeeper 客户端连接的 server 端的本地维护。当客户端断开与 server 的连接时将收不到任何 Watch，当客户端重新连接上 server，所有之前注册的 Watch 将被重新注册并在需要的时候触发。
@@ -73,8 +123,6 @@ Watch 事件有关键点：
 - Watch 是一次性触发的，如果已经收到 Watch 事件之后想再次感知数据变化则必须再次设置 Watch
 - Watch 触发到再次设置 Watch 之间有可能会有多次数据变更
 
-## Zookeeper access control using ACLs
-## 可插拔的 ZooKeeper 认证
 ## Zookeeper 一致性保证
 ## zookeeper 集群搭建
 ```

@@ -1,4 +1,4 @@
-## ZooKeeper 选举机制
+## 选举机制
 - 选举发生时间：集群启动时、leader 宕机时
 - 选举算法：Leader Election、AuthFast Leader Election、Fast Leader Election(默认)
 - 选举参与的参数  
