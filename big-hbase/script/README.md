@@ -1,4 +1,2 @@
-/hbase/data			5T
-
-
-http://hbasefly.com/category/hbase/
+## HBase in Docker
+https://github.com/dajobe/hbase-docker

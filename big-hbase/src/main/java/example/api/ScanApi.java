@@ -6,7 +6,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.*;
 
-public class FilteredScan {
+public class ScanApi {
 
 
     public void familyFilter(){
