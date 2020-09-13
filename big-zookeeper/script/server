@@ -1,0 +1,8 @@
+#!/bin/bash
+
+logs_dir=/data/logs
+
+mkdir -p $logs_dir /data/zookeeper
+
+./zkServer.sh start > $logs_dir/zookeeper.log 2>&1 &
+echo "zookeeper start logging to $logs_dir/zookeeper.log"

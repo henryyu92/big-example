@@ -48,8 +48,6 @@ ZooKeeper 提供了非常简单易用的编程接口，其支持如下操作：
 ### 数据模型
 ZooKeeper 提供的分层名称空间很像分布式文件系统，命名空间的名称是由斜杠(/) 分隔的路径序列。与文件系统不同的是，ZooKeeper 命名空间中的每个节点都可以包含与之关联的数据以及子节点，这就像一个既可以是文件也可以是目录的文件系统。
 
-ZooKeeper 设计用于存储协调数据，如状态信息、配置、位置信息等，因此存储在每个节点的数据通常很小(1M 以内)，ZooKeeper 的数据节点称为 Znode。
-
 #### ZNode
 ZooKeeper 树形结构中的节点称为 Znode，其维护一个 stat 结构，包含数据更改的版本号、ACL 更改和时间戳等信息用于缓存验证以及协调更新。
 
@@ -57,42 +55,63 @@ ZooKeeper 树形结构中的节点称为 Znode，其维护一个 stat 结构，�
 
 Znode 的读写是原子的，读操作获取 Znode 的全部数据，写操作将会覆盖所有的原始数据，每个数据节点都有一个访问控制列表(ACL) 用于权限控制。
 
+ZooKeeper 设计用于存储协调数据，如状态信息、配置、位置信息等，因此存储在每个节点的数据通常很小(1M 以内)，ZooKeeper 客户端和服务器会对数据进行检查以确保 znode 上的数据少于 1M。较大数据量的操作在网络传输和磁盘存储上需要消耗更多的时间，影响整体的性能。
 
+ZooKeeper 实现了多种不同特性的 Znode，这些特性可用于实现更加高级的功能：
 
+- **临时节点(Ephemeral Node)**：临时节点只有在会话处于活动状态时存在，会话结束时节点就会被删除。这种特性使得临时节点不能有子节点
+- **顺序节点(Sequence Node)**：顺序节点在创建时会在路径的末尾附加一个单调递增的计数器，此计数器对于父节点来是唯一的。计数器是一个 4 字节的无符号整数，因此一个节点下的顺序节点数不能超过 `2^31 - 1` 个。
+- **容器节点(Container Node)**：容器节点的最后一个子节点被删除后，该节点就会被服务器在某个时刻删除，可以用于分布式锁、leader 选举等场景。由于容器节点的特性，在创建容器节点的子节点时需要检查 `KeeperException.NoNodeException`，并且在捕获异常后重新创建容器节点
+- **TTL 节点(TTL Node)**：在创建持久节点和顺序持久节点时，可以为这些节点设置一个以毫秒为单位的生存周期(TTL)，如果这些节点没有子节点并且在生存周期内没有修改，那么服务器将会在某个时刻删除该节点。节点的 TTL 特性默认是禁用的，需要在启动服务之前配置，没有启用 TTL 时创建 TTL 节点会抛出 `KeeperException.UnimplementedException`
 
+#### Time
 
-ZNodes 作为 ZooKeeper 的主要实体，有很多特性：
-- Watches - 客户端可以在 ZNodes 上设置 watches，对该znode的更改会触发并清除 watch，当 watch 触发时，ZooKeeper会向客户端发送通知。
-- Data Access - 存储在命名空间中每个znode的数据以原子方式读取和写入。读取获取与znode关联的所有数据字节，写入替换所有数据。 每个节点都有一个访问控制列表（ACL），限制谁可以做什么。<strong><em>ZooKeeper并非设计为通用数据库或大型对象存储库。 相反，它管理协调数据。 这些数据可以以配置，状态信息，会合等形式出现。各种形式的协调数据的共同特性是它们相对较小：以千字节为单位。 ZooKeeper客户端和服务器实现具有健全性检查，以确保znode的数据少于1M，但数据应远低于平均值。 在相对较大的数据大小上操作将导致某些操作比其他操作花费更多的时间并且将影响某些操作的延迟，因为通过网络将更多数据移动到存储介质上需要额外的时间。 如果需要大数据存储，处理此类数据的通常模式是将其存储在大容量存储系统（如NFS或HDFS）上，并存储指向ZooKeeper中存储位置的指针。</em></strong>
-- Ephemeral Nodes - ZooKeeper 有临时节点的概念。只要创建znode的会话处于活动状态，就会存在这些znode，会话结束时，znode将被删除。 由于这种行为，临时znodes不允许有孩子。
-- Sequence Nodes - 在创建 Znode 时，还可以请求ZooKeeper在路径末尾附加一个单调递增的计数器。 此计数器对于父znode是唯一的。 计数器具有％010d的格式 - 具有0（零）填充的10位数（计数器以这种方式格式化以简化排序），即“<path> 0000000001”。
-- Container Nodes - Zookeeper 有容器节点的概念。容器节点是一种特殊的 Znodes，当容器节点的最后一个子节点被删除后，该节点将会在之后被删掉。基于容器节点的这种特性，当在容器节点中创建子节点时需要捕获 KeeperException.NoNodeException 并在捕获之后重新创建容器节点。
-- TTL Nodes - 在创建 PERSISTENT 或者 PERSISTENT_SEQUENTIAL 节点时，还可以为这些节点设置以毫秒为单位的 TTL，如果该节点没有修改 TTL 并且没有子节点，则会在到期后删除该节点。TTL 节点必须在系统属性中设置启用才能使用，默认是禁止的，如果没有启动就创建的话会抛出 KeeperException.UnimplementedException
+ZooKeeper 的 Znode 中的数据包含多个时间，这些时间在 ZooKeeper 中有非常重要的作用：
 
-#### 时间
-- **Zxid** - 对ZooKeeper状态的每次更改都会以zxid（ZooKeeper Transaction Id）的形式标记，这暴露了ZooKeeper所有更改的总排序。每个更改都有一个唯一的zxid，如果zxid1小于zxid2，则zxid1发生在zxid2之前
-- **Version numbers** - 对节点的每次更改都会导致该节点的某个版本号增加。 三个版本号是version（znode数据的更改次数），cversion（znode 子节点的更改次数）和aversion（znode的ACL更改次数）
-- **Ticks** - 当使用多服务器ZooKeeper时，服务器使用 ticks 来定义事件的时间，例如状态上载，会话超时，节点之间的连接超时等。tick 时间仅通过最小会话超时（tick 时间的2倍）间接暴露; 如果客户端请求的会话超时小于最小会话超时，则服务器将告诉客户端会话超时实际上是最小会话超时
-- **Real time** - 除了在znode创建和znode修改时将时间戳放入stat结构之外，ZooKeeper根本不使用实时或时钟时间
+- **Zxid** ：ZooKeeper 状态的每次更改都会以 zxid（ZooKeeper Transaction Id）标记，通过 zxid 可以得到 ZooKeeper 所有状态变更的总排序。每个更改都有一个唯一的zxid，如果zxid1小于zxid2，则zxid1发生在zxid2之前
+- **Version numbers** ：Znode 数据结构中包含三个版本字段：version, cversion, aversion，对节点的每次更改都会导致该节点的某个版本号增加
+- **Ticks** ：ZooKeeper 集群的服务器之间使用 ticks 来定义事件的时间，tick 仅通过最小会话超时（tick 的2倍）间接暴露，如果客户端请求的会话超时小于最小会话超时，则服务器将告诉客户端会话超时实际上是最小会话超时
 
 #### Stat
-- czxid：Znode 创建时的 Zxid
-- mzxid：修改此znode时的zxid
-- pzxid：修改此znode的子节点时的zxid
-- ctime：创建此znode的时间（以毫秒为单位）
+
+Stat 是 Znode 中保存的数据结构，其除了包含存储的数据外，还有一些其他的字段：
+
+- czxid：导致 znode 创建的状态变更 zxid
+- mzxid：znode 最后修改的状态变更 zxid
+- pzxid：znode 最后修改子节点的状态变更 zxid
+- ctime：从创建 znode的 epoch 开始的时间（以毫秒为单位）
 - mtime：上次修改此znode时的时间（以毫秒为单位）
-- version：此znode数据的更改次数
-- cversion：此znode的子节点的更改数
-- aversion：此znode的ACL更改次数
+- version：znode 数据的更改次数
+- cversion：znode的子节点的更改数
+- aversion：znode的ACL更改次数
 - ephemeralOwner：如果znode是短暂节点，则此znode的所有者的会话ID；如果它不是一个短暂的节点，它将为零
 - dataLength：此znode的数据字段的长度
 - numChildren：此znode的子节点数
+
+#### ACL
+
+### Session
+
+ZooKeeper 通过创建服务句柄与 ZooKeeper 服务建立会话，句柄创建之后就处于 `CONNECTING` 状态并尝试与集群中的任意一个节点建立连接，如果连接成功则会切换到 `CONNECTED` 状态，否则切换到 `CLOSE` 状态。三种状态在不同的情况下会互相切换：
+
+- `CONNECTING -> CONNECTED	`：连接成功触发 `CONNECTED` 事件
+- `CONNECTING -> CLOSE`：连接认证失败触发 `AUTH_FAILED` 事件，会话超时触发 `SESSION_EXPIRED` 事件，句柄关闭
+- `CONNECTED -> CONNECTING`：连接失败触发 `DISCONNECTED`事件
+- `CONNECTED -> CLOSE`：句柄关闭
+
+客户端创建会话需要以 `<ip>:<port>,<ip>:<port>` 的方式提供所有服务节点的信息，ZooKeeper 客户端将选择任意服务器并尝试连接，如果连接失败或者连接断开会自动尝试连接其他服务节点知道重新创建连接。
+
+创建会话时也可以使用 `<ip>:<port>/path/of/user` 来表示该会话的所有操作都在此目录下，这个功能在多租户的情况下比较有用 。
+
+
+
+#### 
 
 ### Watch
 
 ZooKeeper 支持 watch 的概念，客户端可以在 znode 上设置 watch，当 znode 上 watch 的事件触发时，客户端会收到一个通知 znode 发生改变的数据包。
 
-znode 上设置的 watch 是一次性的，也就是在触发之后就被删除，客户端需要重新设置 watch 才会继续监听。*3.6.0 版本提供了一个新的特性，即客户端可以在 znode 上设置永久的、递归的 watch，这些  watch 在触发后不会被删除*
+znode 上设置的 watch 是一次性的，也就是在触发之后就被删除，客户端需要重新设置 watch 才会继续监听。***3.6.0 版本提供了一个新的特性，即客户端可以在 znode 上设置永久的、递归的 watch，这些  watch 在触发后不会被删除。***
 
 
 
@@ -105,7 +124,7 @@ Watch 事件有关键点：
 - Watch 事件是异步发送的，也就是在更改成功的响应返回到客户端时 Watch 事件可能还没有到达客户端。但是 ZooKeeper 提供了顺序保证：客户端只有看到了 Watch 事件，才能看到对该节点的更改响应。
 - 设置 Watch 的节点数据变更有两种方式：当前节点数据变更和子节点变更；因此 Watch 事件可以看作 data watch 和 child watch。setData() 将会触发 data watch；create() 将触发当前节点的 data watch 和父节点的 child watch；delete() 将会触发当前节点的 data watch 和父节点的 child watch。
 
-### Watch 事件
+#### Watch 事件
 当读取 ZooKeeper 的状态时可以设置 Watch，当 Watche 触发时会生成相应的事件：
 - Created evetn - 调用 exists() 时激活
 - Deleted event - 调用 exists()，getData()，getChildren() 时激活
@@ -114,16 +133,15 @@ Watch 事件有关键点：
 - Child Remove event - 调用getChildren() 时添加，在 Watch 移除时触发
 - Data Remove event - 调用 exist() 或 getData() 时添加，在 Watch 移除时触发
 
-### ZooKeeper Watch 保证
+#### ZooKeeper Watch 保证
 - Watch 相对于其他事件、其他 watch 和异步恢复而言是有序的；ZooKeeper 客户端保证所有的分发是按顺序的
 - 客户端在看见新数据之前一定会看到 Watch 事件
 - ZooKeeper 的 Watch 事件的顺序和数据更改的顺序一致
 
-### ZooKeeper Watch 要点
+#### ZooKeeper Watch 要点
 - Watch 是一次性触发的，如果已经收到 Watch 事件之后想再次感知数据变化则必须再次设置 Watch
 - Watch 触发到再次设置 Watch 之间有可能会有多次数据变更
 
-## Zookeeper 一致性保证
 ## zookeeper 集群搭建
 ```
 # The number of milliseconds of each tick
