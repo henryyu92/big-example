@@ -92,7 +92,7 @@ Stat 是 Znode 中保存的数据结构，其除了包含存储的数据外，�
 
 ### Session
 
-ZooKeeper 通过创建服务句柄与 ZooKeeper 服务建立会话，句柄创建之后就处于 `CONNECTING` 状态并尝试与集群中的任意一个节点建立连接，如果连接成功则会切换到 `CONNECTED` 状态，否则切换到 `CLOSE` 状态。三种状态在不同的情况下会互相切换：
+ZooKeeper 客户端通过创建服务句柄与 ZooKeeper 服务建立会话，句柄创建之后就处于 `CONNECTING` 状态并尝试与集群中的任意一个节点建立连接，如果连接成功则会切换到 `CONNECTED` 状态，否则切换到 `CLOSE` 状态。三种状态在不同的情况下会互相切换：
 
 - `CONNECTING -> CONNECTED	`：连接成功触发 `CONNECTED` 事件
 - `CONNECTING -> CLOSE`：连接认证失败触发 `AUTH_FAILED` 事件，会话超时触发 `SESSION_EXPIRED` 事件，句柄关闭
@@ -103,9 +103,19 @@ ZooKeeper 通过创建服务句柄与 ZooKeeper 服务建立会话，句柄创�
 
 创建会话时也可以使用 `<ip>:<port>/path/of/user` 来表示该会话的所有操作都在此目录下，这个功能在多租户的情况下比较有用 。
 
+当客户端获得 ZooKeeper 服务的句柄时，ZooKeeper 创建一个 64 位数字表示的会话 ID 并分配给客户端，客户端连接 ZooKeeper 服务器时会携带会话 ID 作为连接握手的一部分。为了确保安全，ZooKeeper 为会话 ID 创建了一个所有服务器都可以校验的密码，当会话建立的时候密码会和会话 ID 一起发送到客户端，当需要再次建立连接时与会话 ID 一起发送到新的服务器。
 
+#### 会话过期
 
-#### 
+客户端在创建会话时可以指定超时时间，ZooKeeper 要求超时时间至少是 `tickTime` 的 2 倍且最大为 `tickTime` 的 20 倍。
+
+当发生集群分区时，客户端搜索创建会话时指定的服务器列表，如果在会话超时内建立了新的连接则会话切换到 `CONNECTED` 状态，否则会话切换到 `EXPIRED` 状态。会话断开连接后不建议立即创建的新的连接，只有在接收到会话过期的通知时再创建新的会话。
+
+会话过期由 ZooKeeper 集群管理，客户端在创建会话时提供超时时间，集群在会话超时时间内如果没有收到客户端的心跳则认为会话过期，集群会立即删除该会话的所有临时节点并通知监听这些节点的、已建立连接的客户端。此时会话过期的客户端仍未与集群建立连接，所以不能收到集群发出的会话过期通知，当客户端再次与集群建立 TCP 连接时，客户端就是接收到会话过期的通知，此时就需要创建新的会话。
+
+创建客户端时另外一个可以指定的参数是一个默认的观察器(watcher)，当客户端的状态发生任何改变时都会通知到观察器，例如失去连接、会话过期等。
+
+客户端发送给服务器的请求使得会话保持活动状态，在会话空闲时客户端会向服务器发送 `PING` 请求以保持会话的活动状态，同时 `PING` 命令也可以检查客户端和服务器之间的连接状态。
 
 ### Watch
 
@@ -113,18 +123,17 @@ ZooKeeper 支持 watch 的概念，客户端可以在 znode 上设置 watch，�
 
 znode 上设置的 watch 是一次性的，也就是在触发之后就被删除，客户端需要重新设置 watch 才会继续监听。***3.6.0 版本提供了一个新的特性，即客户端可以在 znode 上设置永久的、递归的 watch，这些  watch 在触发后不会被删除。***
 
+ZooKeeper 的所有读取操作 `getData`, `getChildren`, `exists` 都可以设置 watch，当 watch 观察的节点发生变更时就会触发事件并发送到设置了 watch 的客户端。
 
+watch 触发的事件由几个特点：
 
-当设置了 Watch 的节点的数据变更，就会触发一次性的 Watch 事件并发送给设置该 Watch 的客户端。Zookeeper 的所有读操作(如 getData, getChildren, exists)都可以对节点设置 Watch。
+- **一次性**：watch 的事件只会触发一次，后续再次变更被观察的节点不会再次触发事件，除非在修改数据之前重新设置了新的 watch
+- **异步发送**：触发的事件是异步发送到设置 watch 的客户端的，ZooKeeper 保证该客户端在接收到触发的事件之前不会看到 watch 的节点的更改
+- **节点变更**：ZooKeeper 节点的变更分为两种，`getData` 和 `exists` 设置的节点数据变更，`getChildren` 设置的子节点列表变更。`setData` 方法变更了节点的数据，因此会触发该节点上的数据变更事件；`create` 则会触发该节点上的数据变更事件以及父节点的子节点列表变更事件；`delete` 会触发该节点的数据变更事件、该节点的子节点列表变更事件、父节点的子节点列表变更事件。
 
 Watches 在 ZooKeeper 客户端连接的 server 端的本地维护。当客户端断开与 server 的连接时将收不到任何 Watch，当客户端重新连接上 server，所有之前注册的 Watch 将被重新注册并在需要的时候触发。
 
-Watch 事件有关键点：
-- Watch 事件是一次性触发的；当设置了 Watch 的节点数据发生变化就会立即触发 Watch 事件并发送给客户端，但是当该节点再次发生变更时，除非在该节点重新设置了 Watch，否则 Watch 事件不会再次被触发
-- Watch 事件是异步发送的，也就是在更改成功的响应返回到客户端时 Watch 事件可能还没有到达客户端。但是 ZooKeeper 提供了顺序保证：客户端只有看到了 Watch 事件，才能看到对该节点的更改响应。
-- 设置 Watch 的节点数据变更有两种方式：当前节点数据变更和子节点变更；因此 Watch 事件可以看作 data watch 和 child watch。setData() 将会触发 data watch；create() 将触发当前节点的 data watch 和父节点的 child watch；delete() 将会触发当前节点的 data watch 和父节点的 child watch。
-
-#### Watch 事件
+#### Event
 当读取 ZooKeeper 的状态时可以设置 Watch，当 Watche 触发时会生成相应的事件：
 - Created evetn - 调用 exists() 时激活
 - Deleted event - 调用 exists()，getData()，getChildren() 时激活
