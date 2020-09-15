@@ -131,9 +131,12 @@ watch 触发的事件由几个特点：
 - **异步发送**：触发的事件是异步发送到设置 watch 的客户端的，ZooKeeper 保证该客户端在接收到触发的事件之前不会看到 watch 的节点的更改
 - **节点变更**：ZooKeeper 节点的变更分为两种，`getData` 和 `exists` 设置的节点数据变更，`getChildren` 设置的子节点列表变更。`setData` 方法变更了节点的数据，因此会触发该节点上的数据变更事件；`create` 则会触发该节点上的数据变更事件以及父节点的子节点列表变更事件；`delete` 会触发该节点的数据变更事件、该节点的子节点列表变更事件、父节点的子节点列表变更事件。
 
-Watches 在 ZooKeeper 客户端连接的 server 端的本地维护。当客户端断开与 server 的连接时将收不到任何 Watch，当客户端重新连接上 server，所有之前注册的 Watch 将被重新注册并在需要的时候触发。
+watche 由客户端连接的服务器维护，当客户端连接到新的服务器时仍然会触发 watch 的事件，但是当客户端与服务器断开连接时则接收不到触发的 watch 事件，在客户端重新建立连接后之前的 watch 依然生效并且在满足条件时触发事件。
 
 #### Event
+
+
+
 当读取 ZooKeeper 的状态时可以设置 Watch，当 Watche 触发时会生成相应的事件：
 - Created evetn - 调用 exists() 时激活
 - Deleted event - 调用 exists()，getData()，getChildren() 时激活
@@ -151,31 +154,7 @@ Watches 在 ZooKeeper 客户端连接的 server 端的本地维护。当客户�
 - Watch 是一次性触发的，如果已经收到 Watch 事件之后想再次感知数据变化则必须再次设置 Watch
 - Watch 触发到再次设置 Watch 之间有可能会有多次数据变更
 
-## zookeeper 集群搭建
-```
-# The number of milliseconds of each tick
-tickTime=2000
-# The number of ticks that the initial 
-# synchronization phase can take
-initLimit=10
-# The number of ticks that can pass between 
-# sending a request and getting an acknowledgement
-syncLimit=5
-# the directory where the snapshot is stored.
-# do not use /tmp for storage, /tmp here is just 
-# example sakes.
-dataDir=/tmp/zookeeper
-# the port at which the clients will connect
-clientPort=2181
-# the maximum number of client connections.
-# increase this if you need to handle more clients
-#maxClientCnxns=60
-# server.A=B:C:D
-# A means myid; B means node name; C means port for communicating with follower and leader; D means port for leader election
-server.1=zoo1:2888:3888
-server.2=zoo2:2888:3888
-server.3=zoo3:2888:3888
-```
+
 
 ZooKeeper 解决了分布式系统中的一些最基础的问题：
 - 提供极低延迟、超高可用的内存 KV 数据库服务
