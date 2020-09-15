@@ -12,5 +12,13 @@
 
     <artifactId>big-zookeeper</artifactId>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+            <version>4.0.1</version>
+        </dependency>
+    </dependencies>
+
 
 </project>
