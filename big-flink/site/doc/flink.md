@@ -89,6 +89,7 @@ object SelfDefineConnection{
 
 #### Single-DataStream 操作
 - ```Map [DataStream -> DataStream]```：调用用户定义的 MapFunction 对 DataStream[T] 数据进行处理，形成新的 DataStream[T]，其中数据格式可能会发生变化，常用作对数据集内数据的清洗和转换。
+  
   ```scala
   val dataStream = env.fromElements(("a", 3), ("d", 4), ("c", 2)).map(t=>(t._1, t._2 + 1))
   ```
@@ -205,7 +206,7 @@ object SelfDefineConnection{
 - 按比例分区(Rescaling Partitioning)：按比例分区也是一种通过循环的方式进行数据重平衡的分区策略，当使用 Roundrobin Partitioning 时，数据会全局性的通过网络介质传输到其他的节点完成数据的重新平衡，而 Rescaling Partitioning 仅仅会对上下游继承的算子数据进行重平衡，具体的分区主要根据上下游算子的并行度决定，上游一个分区中的数据会按照比例路由到下游的分区中，DataStream 中的 rescale 方式实现数据集的按比例分区。
   ```scala
   dataStream.rescale
-  ``` 
+  ```
 - 广播操作  
   广播策略将输入的数据集复制到下游算子的并行 Task 中，下游算子中的 Task 可以直接从本地内存中获取广播数据集而不需要依赖网络传输；这种分区策略适合小数据集。DataStream 中的 broadcast 方法实现了广播分区
   ```scala
@@ -329,7 +330,7 @@ Flink 使用 Watermark 机制来处理数据延迟，它能够衡量数据处理
       currentTimestamp
     }
   }
-  ```    
+  ```
   - PunctuatedWatermark 根据一些特殊条件触发生成 Watermark，需要实现 AssignerWithPunctuatedWatermark 接口并复写方法完成抽取 Event Time 和 Watermark 定义逻辑：
   ```scala
   class PunctuatedAssigner extends AssignerWithPunctuatedWatermarks[(String, Long, Int)] {
@@ -343,7 +344,7 @@ Flink 使用 Watermark 机制来处理数据延迟，它能够衡量数据处理
       element._2
     }
   }
-  ```                                                        
+  ```
 ### Window
 Flink DataStream API 将窗口抽象成独立的 Operator 并且内建了大多数的窗口算子。在每个窗口算子中包含了 Windows Assigner, Windows Trigger, Evictor, Lateness, Output Tag 以及 Windows Function 等。
 - Windows Assigner 指定窗口的类型，定义如何将数据流分配到一个或多个窗口
@@ -375,9 +376,11 @@ DataStream API 针对滑动窗口提供了基于 Event Time 的 SlidingEventTime
 
 会话窗口类型适合非连续性数据处理货周期性产生数据的场景，DataStream API 提供了基于 Event Time 的 EventTimeSessionWindows 和 基于 Process Time 的 ProcessTimeSessionWindows，通过 withGap 方法指定 session Gap。
 ```scala
+
 ```
 除了使用 withGap 方法指定固定的 Session Gap 外，Flink 支持动态的调整 Session Gap，只需要实现 SessionWindowTimeGapExtractor 接口并复写 extract 方法完成动态 session Gap 的抽取，然后使用 withDynamic 方法即可：
 ```scala
+
 ```
 会话窗口本质上没有固定的起止时间点，底层是为每个进入的数据都创建了一个窗口，最后将距离 Session gap 最近的窗口进行合并然后计算窗口结果，因此需要能够合并的 Trigger 和 Windows Function
 ###### 全局窗口
@@ -486,9 +489,11 @@ Evictor 是 Flink 窗口机制中一个可选的组件，主要作用是对进�
 - DeltaEvictor：通过定义 DeltaFunction 和指定阈值并计算窗口中的元素与最新元素之间的 delta 大小，如果超过阈值着将当前元素剔除
 - TimeEvictor：指定时间间隔将当前窗口中最新元素的时间减去 interval，然后将小于该结果的数据全部剔除，本质是将具有最新时间的数据选择出来，剔除过时的数据
 ```scala
+
 ```
 可以通过实现 Evictor 接口自定义数据剔除逻辑：
 ```scala
+
 ```
 #### 延迟数据处理
 基于 Event-Time 的窗口处理流式数据虽然提供了 Watermark 机制，但只能在一定程度上解决数据乱序问题。在某些情况下数据可能延时非常严重，即使通过 Watermark 机制也无法等到数据全部进入窗口再进行处理，Flink 默认会将这些迟到的数据丢弃，如果需要即使数据延迟也能够正常按照流程处理并输出结果则需要使用 Allowed Lateness 机制来对迟到的数据进行额外的处理。
@@ -497,37 +502,45 @@ DataStream API 提供了 allowedLateness 方法指定是否对迟到的数据进
 
 Flink 提供了 ```sideOutputLateData``` 方法标记迟到数据，然后使用 ```getSildeOutput``` 从窗口中获取 lateOutputTag 标签对应的数据之后转换成独立的 DataStream 数据集进行处理。
 ```scala
+
 ```
 #### 窗口计算
 对接入的流式数据进行窗口处理的过程是将 DataStream 在窗口中完成计算逻辑，计算完成后会转换成DataStream 以继续进行后续的处理。
 ##### 独立窗口计算
 针对同一个 DataStream 进行不同的窗口处理，窗口之间相对独立，输出结果在不同的 DataStream 中，在运行时会在两个不同的 Task 中执行，相互之间元数据不会进行共享
 ```scala
+
 ```
 ##### 连续窗口计算
 连续窗口计算表示上游窗口的计算结果是下游窗口计算的输入，窗口之间的元数据信息能够共享。
 ```scala
+
 ```
 #### 窗口关联
 Flink 支持窗口上的多流合并，即在一个窗口中按照相同条件对两个输入数据流进行关联操作，需要保证输入的数据流构建在相同的窗口上并使用相同类型的 key 作为关联条件。
 ```scala
+
 ```
 在 Windows Join 中，指定不同的 Windows Assigner，DataStream 的关联过程也相应不同，包括数据计算的方式也会有所不同。
 ##### 滚动窗口关联
 滚动窗口关联操作是将滚动窗口中相同 key 的两个 DataStream 数据集中的元素进行关联并应用用户自定义的 JoinFunction 计算关联结果。
 ```scala
+
 ```
 ##### 滑动窗口关联
 滑动窗口关联操作过程中会出现重叠的关联操作
 ```scala
+
 ```
 ##### 会话窗口关联
 会话窗口关联对两个数据流进行窗口关联操作，窗口中含有两个数据集的元素，并且元素具有相同的 key 则输出关联计算结果
 ```scala
+
 ```
 ##### 间隔关联
 间隔关联的数据元素关联范围不依赖窗口划分，而是通过 DataStream 元素的时间加上或减去指定 interval 作为关联窗口，然后和另外一个 DataStream 的数据元素时间在窗口内进行 Join 操作
 ```scala
+
 ```
 ### 作业链
 Flink 作业中可以指定相应的链条将相关性非常强的转换操作绑定在一起，这样能够让转换过程上下游的 Task 在同一个 Pipeline 中执行，进而避免因为数据在网络或者线程间传输导致的开销。
@@ -538,6 +551,7 @@ StreamExecutionEnvironment.disableOperatorChaining
 ```
 关闭全局作业链后，创建对应 Operator 的链条需要事先指定操作符，然后再通过使用 startNewChain 方法创建且创建的链条只对当前的操作符和之后的操作符进行绑定，不影响其他的操作。
 ```scala
+
 ```
 #### 禁用局部链条
 使用 disableChaining 方法禁用当前操作符上的链条

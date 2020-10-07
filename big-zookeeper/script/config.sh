@@ -3,7 +3,7 @@
 # . /build/config.sh
 
 ZOO_VERSION=3.6.2
-ZOO_DIST="https://mirrors.tuna.tsinghua.edu.cn/apache/zookeeper"
+ZOO_DIST="http://archive.apache.org/dist/zookeeper"
 
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 
