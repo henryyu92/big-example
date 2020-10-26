@@ -7,8 +7,7 @@ HBase 客户端使用 Java 开发，通过 ThriftServer 可以支持其他语言
 ### Shell
 
 ```sh
-# 启动 HBase Shell
-./hbase shell
+
 ```
 
 
