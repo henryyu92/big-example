@@ -61,21 +61,19 @@ Kafka 为了在数据一致性和高性能之间平衡规定消息只有写入�
 
 ### 安装部署
 
-#### Docker
+Kafka 集群由生产者、消费者、Broker 和 ZooKeeper 组成，其中生产者和消费者与业务绑定，因此不需要独立部署。ZooKeeper 集群通常作为集群管理、Master 选举、分布式协调组件被各个不同的业务公用，因此也不需要独立部署。
 
-#### K8S
+**Docker**
 
-### API
+**K8S**
 
-#### Admin API
+**参数配置**
 
-#### Producer API
+Kafka 集群启动时会读取 `$KAFKA_HOME/config/server.properties` 文件中设置的参数，通过对这些参数的调优能够使得 Kafka 集群获得更好的性能。
 
-#### Consumer API
-
-#### Stream API
-
-#### Connect API
-
-
+- **`zookeeper.connect`**：指定 broker 需要连接的 ZooKeeper 集群的地址(包含端口号)，使用逗号 (,) 隔开集群的多个节点地址。在集群地址上增加一个 chroot 路径 (如 `localhost:2181/kafka`) 指定 Kafka 数据存储的根路径，可以使得 ZooKeeper 能够以多租户的方式为不同的业务提供服务
+- **`listeners`**：指定 broker 监听客户端连接的地址列表，格式为 `protocol://hostname:port`，只有指定的客户端才能连接到 broker，默认值为 null 表示任意客户端可以连接。Kafka 支持三种协议：PLAINTEXT、SSL、SASL_SSL
+- **`broker.id`**：指定当前 broker 的唯一标识，默认为 -1，即在集群启动时默认生成
+- **`log.dir`**：指定 broker 存储数据的地址，默认为 `/tmp/kafak-logs`
+- **`message.max.bytes`**：指定 broker 能接收的消息的最大值，默认为 1000012，超过指定大小的消息被发送到 broker 时会抛出 `RecordTooLargeException`
 

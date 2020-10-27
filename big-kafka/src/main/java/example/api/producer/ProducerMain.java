@@ -5,9 +5,10 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 
+import java.util.HashMap;
 import java.util.Properties;
 
-public class Main {
+public class ProducerMain {
 
     public static void main(String[] args) {
 

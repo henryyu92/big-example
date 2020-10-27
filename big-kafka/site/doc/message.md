@@ -1,4 +1,17 @@
+### 消息
+
+Kafka 中的消息称为 `Record`，生产者将业务数据组装成 `ProducerRecord` 发往 broker，消费者将消息从 broker 拉去后封装成 `ConsumerRecord` 给下游业务使用。
+
+### 主题
+
+### 分区
+
+
+
+
+
 ### 消息格式
+
 Kafka 消息(Record)是总是以分批(RecordBatch)的形式写入，一个 RecordBatch 包含一个或多个 Record。
 
 RecordBatch 的格式如下：

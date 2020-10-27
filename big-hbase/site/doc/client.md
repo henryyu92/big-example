@@ -14,17 +14,13 @@ HBase 客户端使用 Java 开发，通过 ThriftServer 可以支持其他语言
 
 ### API
 
-#### Get
+**Put**
 
-#### Scan
+**Scan**
 
-##### Filter
+**Delete**
 
-#### Put
-
-#### Delete
-
-#### Admin
+**Admin**
 
 Admin 操作提供了对 HBase 的管理，包括命名空间和表的管理，Compaction 的执行，Region 的迁移等。
 
