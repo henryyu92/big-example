@@ -5,7 +5,9 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class KafkaProducerFactory {
+public final class KafkaProducerFactory {
+
+    private KafkaProducerFactory(){}
 
     private static final Map<Entry, KafkaProducer> producerPool = new ConcurrentHashMap<>();
 
