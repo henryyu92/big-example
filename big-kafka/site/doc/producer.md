@@ -134,7 +134,7 @@ ClientUtils.closeQuietly(partitioner, "producer partitioner", firstException);
 AppInfoParser.unregisterAppInfo(JMX_PREFIX, clientId, metrics);
 ```
 ### 拦截器
-生产者拦截器可以在消息发送前做一些准备工作，比如过滤消息、修改消息等，也可以在发送回调逻辑前做一些统计等。生产者拦截器需要实现 ```org.apache.kafka.clients.producer.ProducerInterceptor``` 接口，该接口定义了 4 个方法：
+生产者拦截器需要实现 ```org.apache.kafka.clients.producer.ProducerInterceptor``` 接口，该接口定义了 4 个方法：
 - ```onSend```：在将消息序列化和计算分区之前会调用，可以在该方法中修改消息
 - ```onAcknowledgement``` ：在消息发送成功或失败之后调用，在 callback 之前调用；该方法会在 Producer 的发送 I/O 线程(ioThread)中运行，所以需要尽可能简单
 - ```close```：用于关闭生产者拦截器时的一些清理工作

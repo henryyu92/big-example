@@ -28,12 +28,6 @@ public <K, V> KafkaProducer<K, V> newProducer(
 
 ```
 
-#### 拦截器
-
-#### 序列化
-
-#### 分区器
-
 #### 消息发送
 
 生产者将业务数据包装成 `ProducerRecord` 作为消息，其包含了多个消息相关的属性：
@@ -96,12 +90,80 @@ public class LogErrorHandler implements Callback {
     @Override
     public void onCompletion(RecordMetadata metadata, Exception exception) {
         if (exception != null){
+            logger.error()
         }
     }
 }
 ```
 
+Kafka 消息发送的回调函数接收两个参数，如果消息发送成功则 `exception` 参数为 null，否则 `metadata` 参数为 null。**Kafka 保证同一个分区的多条消息的发送顺序和回调函数的调用顺序一致**。
 
+#### 拦截器
+
+消息在发送前会经过拦截器的处理，Kafka 提供了 `ProducerRecord` 接口定义生产者的拦截器：
+
+```java
+public interface ProducerInterceptor<K, V> extends Configurable {
+    
+    // 在消息序列化和分区之前调用，抛出的异常需要捕获
+    public ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
+    
+    // 在回调函数之前执行，方法在 I/O 线程中执行，因此需要尽量简单
+    public void onAcknowledgement(RecordMetadata metadata, Exception exception);
+    
+    public void close();
+}
+```
+
+生产者拦截器可以改变消息的值，
+
+
+
+自定义的拦截器需要实现 `ProducerInterceptor` 接口并在实例化 `KafkaProducer` 时设置：
+
+```java
+configMap.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "custom_interceptor_name");
+```
+
+
+
+#### 序列化
+
+Kafka 的数据以二进制存储，为了减少 Broker 的负载，Kafka 的数据在客户端进行序列化。Kafka 提供 `Serializer` 接口定义序列化器：
+
+```java
+public interface Serializer<T> extends Closeable {
+    
+    default void configure(Map<String, ?> configs, boolean isKey) {}
+    
+    byte[] serialize(String topic, T data);
+    
+    default byte[] serialize(String topic, Headers headers, T data) {
+        return serialize(topic, data);
+    }
+    
+    default void close() {}
+}
+```
+
+Kafka 提供了常见数据类型的序列化器，对于特定数据类型的序列化器可以通过实现 `Serializer` 接口自定义：
+
+- `StringSerializer`
+- `ByteArraySerializer`
+- `ByteBufferSerializer`
+- `...`
+
+在创建 `KafkaProducer` 实例时需要指定序列化器：
+
+```java
+configMap.put()
+```
+
+
+
+#### 分区器
+
+消息存储在主题的指定分区中，在消息发送到 Broker 之前需要计算消息所属的分区。
 
 #### 流程分析
 
@@ -111,4 +173,10 @@ public class LogErrorHandler implements Callback {
 
 #### 反序列化
 
+#### 拦截器
+
+#### 分区分配
+
 ### Admin
+
+### Shell
