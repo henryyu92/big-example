@@ -185,12 +185,7 @@ public class CustomProducerInterceptor implements ProducerInterceptor<String, St
 props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, CustomProducerInterceptor.class.getName());
 ```
 ### 序列化器
-生产者需要序列化器将消息对象转换为字节数组才能通过网络传给 broker，消费者需要将接收到的字节数组反序列化为消息对象。Kafka 客户端自带了多种序列化器，它们都实现了 ```org.apache.kafka.common.serialization.Serializer``` 接口：
-- ```serialize``` 方法用于执行序列化操作，将数据序列化为字节数组
-- ```close``` 方法用于关闭当前的序列化器，如果实现需要保证幂等性
-- ```configure``` 方法设置序列化器的配置
 
-生产者使用的序列化器和消费者使用的反序列化器需要对应，否则会出现解析错误。通过实现 ```Serializer``` 接口可以自定义序列化器：
 ```java
 public class CustomSerializer implements Serializer<String> {
     @Override
@@ -211,17 +206,7 @@ properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, CustomSerializer.clas
 properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, CustomSerializer.class.getName());
 ```
 ### 分区器
-消息在通过 send 方法发往 broker 的过程中需要经过拦截器、序列化器和分区器的作用。消息经过序列化后需要分区器确定发往的分区，如果消息(ProducerRecord)指定了 partition 则直接发往该分区否则分区器根据消息的 key 计算发往的分区。
 
-Kafka 中分区器需要实现 ```org.apache.kafka.clients.producer.Partitioner``` 接口，接口定义了两个方法：
-- ```partition``` 方法用来计算分区号
-- ```close``` 方法用于关闭分区器
-
-Kafka 提供了默认分区器 ```DefaultPartitioner```，partition 方法中的分区策略是：
-- 如果 key 不为 null 则对 key 进行哈希(采用 MurmurHash2 算法)，然后根据哈希值对 topic 所有的分区取模获取分区号
-- 如果 key 为 null，则查找 topic 的所有可用分区，然后通过轮询的方式将消息发往这些分区
-
-在不改变主题分区数量的情况下，key 与分区之间的映射可以保持不变，一旦主题增加了分区，那么就难以保证 key 与分区之间的映射关系了。
 ```java
 public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
     // 主题的所有分区
@@ -277,7 +262,6 @@ properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, CustomerPartitioner.clas
 
 ### 消息发送流程
 
-生产者客户端由两个线程协调运行，分别为主线程和 Sender 线程。在主线程中 KafkaProducer 创建的消息经过拦截器、序列化器和分区器作用之后缓存到消息累加器(RecordAccumulator)中，Sender 线程负责从 RecordAccumulator 中获取消息并将其发送到 broker 中。
 ```java
 @Override
 public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
@@ -300,9 +284,7 @@ public Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callb
 	// ...
 }
 ```
-RecordAccumulator 主要用于缓存消息以便 Sender 线程可以批量发送消息从而减少网络传输的资源消耗以提升性能，缓存的大小可以通过 ```buffer.memory``` 参数控制，默认是 33554432B 即 32M；如果生产者发送消息的速度过快则 send 方法会阻塞超时后抛出异常，阻塞时间由 ```max.block.ms``` 参数控制，默认是 60000 即 60s。
 
-RecordAccumulator 通过 ```ConcurrentMap<TopicPartition, Deque<ProducerBatch>> ``` 为每个分区维护一个存储 ```ProducerBatch``` 的双端队列，主线程中发送的消息将会被追加到 RecordAccumulator 的与 TopicPartition 对应分区的双端队列 ```Deque<ProducerBatch>``` 中，消息写入 Deque 的尾部，Sender 线程从 Deque 的头部消费。
 ```java
 public final class RecordAccumulator{
     // ...
@@ -315,9 +297,7 @@ public final class RecordAccumulator{
 
 ```
 
-客户端的消息是以字节的方式传输到 broker，Kafka 客户端中是以 ByteBuffer 实现消息在内存的创建和释放，RecordAccumulator 内部实现了一个 BufferPool 用于重复利用 ByteBuffer 从而减少重复的创建和销毁 ByteBuffer。BufferPool 只针对特定大小的 ByteBuffer 进行管理，而其他大小的 ByteBuffer 不会缓存仅 BufferPool 中，这个特定大小由 ```batch.size``` 参数决定，默认值为 16384B，即 16K
 
-ProducerBatch 包含一个或多个 ProducerRecord 这样使得网络请求减少提升吞吐量，当消息缓存到 Accumulator 时首先查找消息分区对应的双端队列(如果没有则创建)，再从这个双端队列的尾部获取一个 ProducerBatch(如果没有则创建)，如果可以写入则写入否则创建一个新的 ProducerBatch，在新建 ProducerBatch 时如果消息大小不超过 ```batch.size``` 则创建大小为 batch.size 的 ProducerBatch，否则按照消息的实际大小创建。为了避免频繁的创建和销毁 ProducerBatch，RecordAccumulator 内部维护一个 BufferPool，当 ProducerBatch 的大小不超过 ```batch.size``` 则这块内存将交由 BuffPool 来管理进行复用。
 ```java
 private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers,
 									 Callback callback, Deque<ProducerBatch> deque) {
@@ -332,48 +312,8 @@ private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, H
 	return null;
 }
 ```
-Sender 线程从 RecordAccumulator 中获取缓存的 ProducerBatch 之后将 <TopicPartition, Deque<ProducerBatch>> 数据结构的消息转换为 <Node, List<ProducerBatch>> 数据结构的消息，其中 Node 表示 broker 节点。转换完成之后 Sender 还会进一步封装成 <Node, Request> 的形式，其中 Request 就是发送消息的请求 ProduceRequest，在发送消息之前 Sender 还会将请求保存到 ```Map<NodeId, Deque<Request>>``` 数据结构的 InFlightRequests 缓存已经发送请求但是没有收到响应的请求，通过 ```max.in.flight.requests.per.connection``` 控制与 broker 的每个连接最大允许未响应的请求数，默认是 5，如果较大则说明该 Node 负载较重或者网络连接有问题。
-
-通过 InFlightRequest 可以得到 broker 中负载最小的，即 InFlightRequest 中未确认请求数最少的 broker，称为 leastLoadedNode
-
-### 元数据更新
-元数据是指 kafka 集群的元数据，这些元数据记录了集群中的主题、主题对应的分区、分区的 leader 和 follower 分配的节点等信息，当客户端没有需要使用的元数据信息时或者超过 ```metadata.max.age.ms```(默认 300000s 即 5 分钟) 没有更新元数据信息时会触发元数据的更新操作。
-
-生产者启动时由于 bootstrap.server 没有配置所有的 broker 节点，因此需要触发元数据更新操作，当分区数量发生变化或者分区 leader 副本发生变化时也会触发元数据更新操作。
-
-客户端的元数据更新是在内部完成的，对外不可见。客户端需要更新元数据时，首先根据 InFlightRequests 获取负载最低的节点 leastLoadedNode(未确认请求最少的节点)，然后向这个节点发送 MetadataRequest 请求来获得元数据信息，更新操作是由 Sender 线程发起，在创建完 MetadataRequest 之后同样会存入 InFlightRequests。
 
 
-### 生产者重要参数
-- ```acks```：指定分区中必须有多少个副本收到消息之后才会认为消息写入成功，acks 有三个可选值：
-  - ```acks=0```：生产者发送消息后不需要等待任务服务端的响应。如果在消息发送到 broker 的过程中出现网络异常或者 broker 发生异常没有接受消息则会导致消息丢失，但这种配置能够达到最大吞吐量
-  - ```acks=1```：默认次设置，生产者发送消息后需要分区 leader 副本响应消息写入成功。如果 leader 写入成功并且在 follower 同步消息之前退出，则从 ISR 中新选举出的 leader 没有这条消息，也会造成消息丢失，这种配置时消息可靠和吞吐量的折中
-  - ```acks=all```：生产者发送消息后需要分区的 ISR 中所有 follower 副本写入成功之后才能收到写入成功的响应，能够保证可靠性，但是吞吐量会受到很大影响
-- ```max.request.size```：限制客户端能发送的消息的最大值，默认 1M
-- ```retries 和 retry.backoff.ms```：retries 参数用于配置生产者重试的次数，默认是 0。retry.backoff.ms 设置重试之间的时间间隔，默认是 100
-- ```compression.type```：指定消息的压缩方式，默认为 "none"，压缩消息可以减少网络传输量从而降低网络 IO，但是压缩/解压缩操作会消耗额外的 CPU 资源
-- ```connections.max.idle.ms```：连接空闲时间，默认 540000ms，超过空闲时间的连接会关闭
-- ```linger.ms```：指定生产者发送 ProducerBatch 之前等待的时间，默认为 0。生产者客户端在 ProducerBatch 填满或者等待时间超过 linger.ms 指定时间就发送，增大此参数会增加消息延时但能提升一定的的吞吐量
-- ```receive.buffer.bytes```：设置 Socket 接受消息缓冲区(SO_RECBUG)的大小，默认为 32768B(32KB)，如果设置为 -1 则使用操作系统的默认值
-- ```send.buffer.bytes```：设置 Socket 发送消息缓冲区(SO_SENDBUF)的大小，默认为 131072B(128KB)，如果设置为 -1 则使用操作系统的默认值
-- ```request.timeout.ms```：配置 Producer 等待请求响应的最长时间，默认值为 30000ms
 
-生产者详细参数：
-
-|参数名|默认值|含义|
-|-|-|:-:|
-|bootstrap.server|""|指定连接 kafka 集群所需的 broker 地址列表|
-|key.serializer||消息中 key 的序列化类|
-|value.serializer||消息中 value 的序列化类|
-|buffer.memory|33554432(23M)|生产者客户端中用于缓存消息的缓冲区大小|
-|batch.size|16384(16K)|指定 ProducerBatch 可以复用的内存区域大小|
-|client.id|""|设置 KafkaProducer 的 clientId|
-|max.block.ms|60000|KafkaProducer 中 send 和 partitionsFor 方法阻塞时长|
-|partitioner.class|DefaultPartitioner|指定生产者分区器|
-|enable.idempotence|false|是否开启幂等功能|
-|interceptor.class|""|指定生产者拦截器|
-|max.in.flight.request.per.connection|5|限制每个连接最多缓存的请求数|
-|metadata.max.age.ms|300000(5min)|元数据更新间隔，超过此间隔则强制更新|
-|transactional.id|null|指定事务 id，必须唯一|
 
 **[Back](../)**
