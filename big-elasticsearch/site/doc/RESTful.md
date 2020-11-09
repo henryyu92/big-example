@@ -8,6 +8,23 @@ ES 提供了 RESTful API 用于操作索引和文档。
 
 ### 集群
 
+Elasticsearch 提供了 API 用于集群的管理和监控。
+
+#### 集群管理
+
+Elasticsearch 集群 API 使用 `_cluster` 来
+
+- `/_cluster/healty`：查看集群健康状态
+- `/_cluster/state`：查看集群的元数据状态
+- `/cluster/stats`：返回集群统计信息
+
+```shell
+# 查看集群状态
+curl -X GET 'localhost:9200/_cluster/health?pretty'
+```
+
+
+
 #### 集群节点
 
 通过 `/_nodes`  可以查看集群的节点信息，查看集群节点信息请求支持多种过滤方式，默认返回所有节点的信息：
@@ -18,14 +35,12 @@ curl -X GET 'ip:port/_nodes'
 
 # 查看 master 角色的节点信息
 curl -X GET 'ip:port/_nodes/_master'
-```
 
+# 查看所有非 master 角色的节点信息
+curl -X GET 'ip:port'/_nodes/_all,_master:false
 
-
-查看集群状态
-
-```sh
-curl -X GET 'localhost:9200/_cluster/health?pretty'
+# 查看指定节点的信息
+curl -X GET 'ip:port'/_nodes/<node_id>
 ```
 
 
@@ -244,29 +259,17 @@ curl -X GET 'ip:port/_cat?pretty'
 curl -X GET 'ip:/port/_cat/master?v&pretty'
 ```
 
-#### 集群状态
+- `/_cat/health`：返回集群的健康状态
 
-`/_cat/health`：返回集群的健康状态
+- `/_cat/nodes`：返回集群节点的相关信息，返回的信息包括
 
-#### 节点信息
+- `/_cat/master`：返回主节点的信息 
 
-`/_cat/nodes`：返回集群节点的相关信息，返回的信息包括
+- `/_cat/indices`：返回集群中索引的信息
 
+- `/_cat/alias` 别名信息
 
-
-`/_cat/master`：返回主节点的信息 
-
-#### 索引信息
-
-`/_cat/indices`：返回集群中索引的信息
-
-
-
-`/_cat/alias` 别名信息
-
-#### 分片信息
-
-`/_cat/shards`：返回集群中索引的分片信息
+- `/_cat/shards`：返回集群中索引的分片信息
 
 ### Bulk API
 
