@@ -4,6 +4,7 @@ import example.api.client.ClientFactory;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.common.Strings;
@@ -12,6 +13,9 @@ import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
 
 import java.io.IOException;
 
+/**
+ * Elasticsearch Get Api 提供文档查询
+ */
 public class GetApi {
 
     private final RestHighLevelClient client;
@@ -41,34 +45,40 @@ public class GetApi {
         return getRequest(index, null);
     }
 
-    public void getDoc(String index, String docId) throws IOException {
+    public void syncGet(String index, String docId) throws IOException {
+
+        GetRequest request = getRequest(index, docId);
+        GetResponse response = client.get(request, RequestOptions.DEFAULT);
+        processResponse(response);
+    }
+
+    public void asyncGet(String index, String docId){
+
         final GetRequest request = getRequest(index, docId);
-
-        // 同步
-        final GetResponse response = client.get(request, RequestOptions.DEFAULT);
-        if (response.isExists()){
-            final long version = response.getVersion();
-            final String source = response.getSourceAsString();
-            System.out.println(source);
-        }
-
-        // 异步
-        client.getAsync(request, RequestOptions.DEFAULT, new ActionListener<GetResponse>() {
+        client.getAsync(request, RequestOptions.DEFAULT, new ActionListener<>() {
             @Override
-            public void onResponse(GetResponse documentFields) {
-
+            public void onResponse(GetResponse response) {
+                processResponse(response);
             }
 
             @Override
-            public void onFailure(Exception e) {
-
-            }
+            public void onFailure(Exception e) {}
         });
+    }
 
+    private void processResponse(GetResponse response){
+        String index = response.getIndex();
+        String id = response.getId();
+        System.out.println(index + ", " + id);
+        if (response.isExists()){
+            long version = response.getVersion();
+            String source = response.getSourceAsString();
+            System.out.println(version + ", " + source);
+        }
     }
 
     public static void main(String[] args) throws IOException {
 
-        new GetApi().getDoc("posts", "eI50uE3gR6qkz_Qck8XTBw");
+        new GetApi().syncGet("posts", "eI50uE3gR6qkz_Qck8XTBw");
     }
 }
