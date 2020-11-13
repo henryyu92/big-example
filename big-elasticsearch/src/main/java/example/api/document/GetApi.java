@@ -66,6 +66,29 @@ public class GetApi {
         });
     }
 
+    public void checkExists(String index, String doc) throws IOException {
+        GetRequest request = getRequest(index, doc);
+        // 禁止提取 _source
+        request.fetchSourceContext(new FetchSourceContext(false));
+        // 显式设置需要返回的字段，默认返回 _source
+        request.storedFields("_none_");
+
+        boolean exists = client.exists(request, RequestOptions.DEFAULT);
+        System.out.println("index: " + index + ", doc: " + doc + ", exists: " + exists);
+
+        client.existsAsync(request, RequestOptions.DEFAULT, new ActionListener<Boolean>() {
+            @Override
+            public void onResponse(Boolean exists) {
+                System.out.println("index: " + index + ", doc: " + doc + ", exists: " + exists);
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+
+            }
+        });
+    }
+
     private void processResponse(GetResponse response){
         String index = response.getIndex();
         String id = response.getId();
