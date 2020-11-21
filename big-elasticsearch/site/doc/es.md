@@ -1,8 +1,12 @@
-## Elasticsearch
+### Elasticsearch
 
 Elasticsearch 是一个高扩展性的分布式全文检索引擎，可以近乎实时的存储、检索数据，可以扩展到上百台服务器，处理 PB 级的数据。
 
-### 核心概念
+Elasticsearch 采用 Lucene 作为核心来实现所有索引和搜索的功能并提供 RESTful API 来隐藏 Lucene 的复杂性，从而让全文搜索变得简单。
+
+#### 集群
+
+
 
 #### 节点
 

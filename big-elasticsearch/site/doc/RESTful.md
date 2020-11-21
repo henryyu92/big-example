@@ -19,7 +19,7 @@ Elasticsearch 集群 API 使用 `_cluster` 来
 - `/cluster/stats`：返回集群统计信息
 
 ```shell
-# 查看集群状态
+# 查看集群健康状态
 curl -X GET 'localhost:9200/_cluster/health?pretty'
 ```
 
@@ -210,6 +210,8 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_create/doc_
 
 获取文档使用 `GET` 方法，获取单个文档需要指定文档 ID
 
+- `/<index_name>/_doc/<doc_id>`：获取指定 ID 的文档信息
+
 ```sh
 curl -X GET 'ip:port/index_name/_doc/doc_id'
 ```
@@ -271,6 +273,6 @@ curl -X GET 'ip:/port/_cat/master?v&pretty'
 
 - `/_cat/shards`：返回集群中索引的分片信息
 
-### Bulk API
+### Bulk
 
-### Search API
+### Search
