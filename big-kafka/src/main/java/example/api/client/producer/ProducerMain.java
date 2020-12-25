@@ -1,11 +1,10 @@
-package example.api.producer;
+package example.api.client.producer;
 
-import example.ConfigurationBuilder;
+import example.api.client.ConfigurationBuilder;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 
-import java.util.HashMap;
 import java.util.Properties;
 
 public class ProducerMain {

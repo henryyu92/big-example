@@ -1,6 +1,6 @@
 package example.api.admin;
 
-import example.ConfigurationBuilder;
+import example.api.client.ConfigurationBuilder;
 import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.common.KafkaFuture;
 

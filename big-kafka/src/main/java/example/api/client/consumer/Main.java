@@ -1,13 +1,11 @@
-package example.api.consumer;
+package example.api.client.consumer;
 
-import example.ConfigurationBuilder;
+import example.api.client.ConfigurationBuilder;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
-import scala.sys.Prop;
 
 import java.time.Duration;
 import java.util.Arrays;
