@@ -1,4 +1,4 @@
-package example.api.consumer.offset;
+package example.api.client.consumer.offset;
 
 public class Main {
 

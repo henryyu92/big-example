@@ -1,4 +1,4 @@
-package example.api.consumer.assigner;
+package example.api.client.consumer.assigner;
 
 
 import org.apache.kafka.clients.consumer.internals.AbstractPartitionAssignor;

@@ -28,6 +28,15 @@
                 <enabled>true</enabled>
             </releases>
         </repository>
+<!--        <repository>-->
+<!--            <id>repo2</id>-->
+<!--            <name>Mirror from Maven Repo2</name>-->
+<!--            <url>https://repo.maven.apache.org/maven2/</url>-->
+<!--            <releases>-->
+<!--                <enabled>true</enabled>-->
+<!--            </releases>-->
+<!--        </repository>-->
+
     </repositories>
 
     <dependencyManagement>

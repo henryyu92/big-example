@@ -1,4 +1,4 @@
-package example.api.consumer.assigner;
+package example.api.client.consumer.assigner;
 
 public class Main {
 

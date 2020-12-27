@@ -1,6 +1,6 @@
-package example.api.consumer;
+package example.api.client.consumer;
 
-import example.ConfigurationBuilder;
+import example.api.client.ConfigurationBuilder;
 
 public class ConsumerBuilder {
 

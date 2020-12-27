@@ -1,190 +1,101 @@
-### 编程模型
+## 生产者
 
-生产者是负责向 Kafka 发送消息的客户端，Kafka 实现了多种语言的客户端。
+Kafka 中生产者是负责发送消息的客户端，消息在生产者客户端经过分区以及序列化后发送到 `Broker` 集群，生产者客户端不需要寻址消息存储的 `Broker` 从而使得整个客户端不会有过重的负载影响业务性能。
 
+`KafkaProducer` 对象表示生产者客户端，在创建实例的时候需要指定必要的参数：
+- `bootstrap.servers`：broker 地址列表，具体格式为 `host1:prot1,host2:port2`，这里不需要配置所有 broker 的地址因为生产者会从给定的 broker 里查找到其他 broker 的信息
+- `key.serializer`：消息的 `key` 的序列化类，消息的 `key` 用于计算消息所属的分区
+- `value.serializer`：消息的 `value` 的序列化类，`value` 是实际需要发送的消息，客户端在将消息发送到 broker 之前需要对消息进行序列化处理
 
-生产者编程模型包含几个步骤：
-- 配置生产者客户端参数并创建相应的生产者实例 
-- 构建待发送的消息
-- 发送消息
-- 关闭生产者实例
+`KafkaProducer` 是线程安全的，因此可以以单例的形式创建，也可以将 `KafkaProducer` 实例进行池化以在高并发的情况下提升系统的吞吐:
 ```java
-public class KafkaProducerTest{
-    public static final String brokerList = "localhost:9092";
-    public static final String topic = "topic-demo";
-
-    // 初始化生产者参数
-    public static Properties initConfig(){
-        Properties props = new Properties();
-        props.put("bootstrap.servers", brokerList);
-        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("value.serializer", "org.apache.common.serialization.StringSerializer")
-        props.put("client.id", "producer.client.id.demo")
-        return props;
-    }
-
-    public static void main(String[] args){
-        Properties props = initConfig();
-        // 创建生产者
-        KafkaProducer<String, String> producer = new KafkaProducer<>(props);
-        // 创建消息
-        ProducerRecord<String, String> record = new ProducerRecord<>(topic, "hello kafka");
-        try{
-            // 发送消息
-            producer.send(record);
-        }catch(Exception e){
-            e.printStackTrace();
-        }
-        // 关闭生产者
-        producer.close();
-    }
-}
+// todo KafkaProducerFactory
 ```
-#### 配置生产者客户端参数
-创建生产者实例前需要配置必要的参数：
-- ```bootstrap.servers```：指定生产者客户端连接 Kafka 集群所需的 broker 地址列表，具体格式为 host1:prot1,host2:port2，这里不需要配置所有 broker 的地址因为生产者会从给定的 broker 里查找到其他 broker 的信息
-- ```key.serializer``` 和 ```value.serializer```：指定消息的 key 和 value 的序列化类，broker 接收的消息必须以字节数组的形式存在，客户端在将消息发送到 broker 之前需要对消息进行序列化处理
-- ```client.id```：指定客户端 id，如果不设置则会自动生成一个默认的 id
 
-生产者客户端的初始化参数非常多，可以使用客户端提供的 ```org.apache.kafka.clients.producer.ProducerConfig```类来指定需要配置的参数：
-```java
-props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
-props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName())
-props.put(ProducerConfig.CLIENT_ID_CONFIG, "producer.client.id.demo")
-```
-#### 创建生产者客户端
-KafkaProducer 是生产者的客户端，在创建 KafkaProducer 时可以通过 Map 也可以通过 Properties 传入必要的参数：
-```java
-public KafkaProducer(final Map<String, Object> configs)
+### 消息发送
 
-public KafkaProducer(Properties properties)
-```
-**KafkaProducer 是线程安全的，可以在多个线程中共享单个实例，也可以将 Kafka 实例进行池化来供其它线程调用。**
-#### 消息对象
-消息对象 ProducerRecord 并不是单纯意义上的消息，它包含了多个属性：
-- topic 和 partition 字段代表消息要发往的主题和分区号
-- header 字段表示消息的头部，用于设置应用相关的信息
-- key 用于指定消息的键，可用于消息分区的划分
-- value 表示消息的内容
-- timestamp 如果配置为 CreateTime 则表示消息创建的时间，如果配置为 LogAppendTime 则表示消息追加到日志文件的时间
+Kafka 客户端将要发送的消息包装为 `ProducerRecord` 对象用于后续的处理，其包含了多个消息相关的属性：
 ```java
-public class ProducerRecord<K, V>{
+public class ProducerRecord<K, V> {
+    // 消息的主题
     private final String topic;
+    // 消息的分区
     private final Integer partition;
+    // 消息头
     private final Headers headers;
+    // 消息的 key
     private final K key;
+    // 消息内容
     private final V value;
+    // 消息创建时间或者追加到日志的时间
     private final Long timestamp;
 	
     // ...
 }
 ```
-#### 发送消息
-Kafka 消息通过 KafkaProducer 的 send 方法异步发送并且返回 Future 对象，send 方法有两个重载类型：
-```java
-Future<RecordMetadata> send(ProducerRecord<K, V> record);
+`ProducerRecord` 定义了生产者向 `Broker` 发送的消息格式，其中 `topic` 在消息创建时必须指定。`partition` 如果没有指定则消息所在的分区会通过 `key` 来计算。`timestamp` 字段在不同的配置下有不同的涵义，如果消息所属的主题在 `Broker` 中设置为 `CREATE_TIME` 则表示生产者创建消息的时间戳，如果设置为 `LOG_APPEND_TIME` 则表示 `Broker` 将消息追加到日志的时间戳。
 
-Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback);
-```
-callback 在消息发送之后调用来实现消息异步发送确认，如果在创建生产者客户端时设置了重试参数 ```retries``` 则在发生可重试异常(RetriableException)时会自动重试，如果重试之后依然异常，则会抛出异常或者调用回调函数。对于同一个分区而言，消息的发送是有序的，callback 也是保证有序的：
+Kafka 生产者客户端以异步的方式发送消息，返回的 `Future` 对象包含了消息发送的结果，Kafka 提供了两种消息发送的重载:
 ```java
-producer.send(msg, new Callback(){
-    public void onCompletion(RecordMetadata metadata, Exception exception){
-        // 表示发送消息异常
-        if(exception != null){
-            exception.printStackTrace();
-        }else{
-            System.out.println(metadata);
-        }
-    }
-})
+public Future<RecordMetadata> send(ProducerRecord<K, V> record);
+
+public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback);
 ```
-可以使用 Future 对象的 get 方法以阻塞的方式获取发送结果 RecordMetadata，该对象包含了消息的元数据信息：
-- offset 表示消息在分区中的位移
-- timestamp 如果配置为 LogAppendTime 则是 broker 返回的时间戳，如果配置为 CreateTime 则表示 producer 处理该 record 的本地时间戳
-- serializedKeySize 表示序列化后的 key 字节数
-- serializedVlaueSize 表示序列化后的 value 字节数
-- topicPartition 表示发送消息的 Topic 和 partition 信息
-- checksum 表示消息的 CRC32 校验和
+如果指定了 `callback`，Kafka 生产者客户端会在消息发送完成后调用。消息发送完成后返回的结果由 `RecordMetadata` 表示，其中包含了消息的分区、消息偏移量等信息：
 ```java
-public final class RecordMetadata{
+public final class RecordMetadata {
+    // 消息偏移量
     private final long offset;
+    // 消息创建时间或者追加到日志的时间
     private final long timestamp;
+    // key 序列化后的字节数
     private final int serializedKeySize;
-    private final ing serializedVlaueSize;
+    // value 序列化后的字节数
+    private final ing serializedValueSize;
+    // 消息的 Topic 和 Partition 信息
     private final TopicPartition topicPartition;
+    // 消息的 CRC32 校验和
     private volatile Long checksum;
 	
     // ...
 }
 ```
-#### 关闭生产者客户端
-消息发送完成之后调用 close 方法回收资源，close 方法会阻塞等待之前所有发送请求完成之后再关闭 KafkaProducer：
-```java
-// 等待关闭发送消息的线程
-this.ioThread.join(timeoutMs);
-
-// 清理拦截器、序列化器、分区器、监控
-ClientUtils.closeQuietly(interceptors, "producer interceptors", firstException);
-ClientUtils.closeQuietly(metrics, "producer metrics", firstException);
-ClientUtils.closeQuietly(keySerializer, "producer keySerializer", firstException);
-ClientUtils.closeQuietly(valueSerializer, "producer valueSerializer", firstException);
-ClientUtils.closeQuietly(partitioner, "producer partitioner", firstException);
-AppInfoParser.unregisterAppInfo(JMX_PREFIX, clientId, metrics);
+生产者客户端在发送消息的过程中会产生两类异常：可重试异常和不可重试异常。对于可重试异常，如果在创建生产者客户端时配置 `retries(默认 0)` 参数则在发生异常时会自动重试，对于不可重试异常则会直接抛出:
 ```
-### 拦截器
-生产者拦截器需要实现 ```org.apache.kafka.clients.producer.ProducerInterceptor``` 接口，该接口定义了 4 个方法：
-- ```onSend```：在将消息序列化和计算分区之前会调用，可以在该方法中修改消息
-- ```onAcknowledgement``` ：在消息发送成功或失败之后调用，在 callback 之前调用；该方法会在 Producer 的发送 I/O 线程(ioThread)中运行，所以需要尽可能简单
-- ```close```：用于关闭生产者拦截器时的一些清理工作
-- ```configure```：用于设置拦截器需要的配置
-
-通过实现 ```ProducerInterceptor``` 接口可以自定义生产者拦截器：
-```java
-public class CustomProducerInterceptor implements ProducerInterceptor<String, String> {
-
-    private AtomicLong sendSuccess = new AtomicLong(0);
-    private AtomicLong sendFailure = new AtomicLong(0);
-
-    @Override
-    public ProducerRecord<String, String> onSend(ProducerRecord<String, String> record) {
-        String newValue = "prefix_" + record.value();
-        return new ProducerRecord<>(
-            record.topic(), 
-            record.partition(), 
-            record.timestamp(), 
-            record.key(), 
-            newValue, 
-            record.headers());
+producer.send(record, (metadata, exception) -> {
+    
+    if (exception != null){
+        
+        // handle exception
     }
-
-    @Override
-    public void onAcknowledgement(RecordMetadata metadata, Exception exception) {
-        if (exception == null){
-            sendSuccess.incrementAndGet();
-        }else{
-            sendFailure.incrementAndGet();
-        }
-    }
-
-    @Override
-    public void close() {
-        double successRatio = sendSuccess.doubleValue() / (sendSuccess.doubleValue() + sendFailure.doubleValue());
-        System.out.println("发送成功率；" + successRatio);
-    }
-
-    @Override
-    public void configure(Map<String, ?> configs) {
-
-    }
-}
+});
 ```
-在生产者配置中指定使用自定义的生产者拦截器即可生效：
+
+### 生产者拦截器
+
+生产者拦截器在消息发送前以及消息发送完成后作用，可用于对发送的消息以及返回的结果作统一的处理。Kafka 提供了 `ProducerInterceptor` 接口定义生产者拦截器，该接口定义了三个方法：
 ```java
-props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, CustomProducerInterceptor.class.getName());
+// 在 send 方法之后，消息系列化和分区之前调用
+// 可以在这个方法中修改消息，消息修改后会导致后续的操作作用于新的消息
+// 方法中抛出的异常会被 catch 而不会继续向上层抛出
+public ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
+
+// 收到消息确认或者消息发送失败之后调用
+// 在 callback 之前调用，方法抛出的异常会被忽略
+// 方法运行在 I/O 线程，因此方法的实现需要尽可能简单
+public void onAcknowledgement(RecordMetadata metadata, Exception exception);
+
+// 关闭拦截器时调用
+public void close();
 ```
+`ProducerInterceptor` 接口同时继承了 `Configurable` 接口，可以通过 `configure` 方法获取客户端配置的参数。生产者拦截器需要在创建生产者客户端实例时设置，在创建实例的配置中添加配置：
+```java
+properties.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "interceptor.class.name");
+```
+
 ### 序列化器
+
+序列化器负责将消息序列化成二进制形式，
 
 ```java
 public class CustomSerializer implements Serializer<String> {
@@ -260,7 +171,7 @@ public class CustomerPartitioner implements Partitioner{
 properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, CustomerPartitioner.class.getName());
 ```
 
-### 消息发送流程
+### 生产者流程
 
 ```java
 @Override
