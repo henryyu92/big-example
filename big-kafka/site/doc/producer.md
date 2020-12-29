@@ -99,6 +99,7 @@ properties.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "interceptor.class.nam
 
 序列化器负责将消息序列化成二进制形式，Kafka 提供了 `Serializer` 接口定义序列化器，通过实现接口可以自定义消息的序列化方式：
 ```java
+byte[] serialize(String topic, T data);
 ```
 Kafka 提供了常见的序列化方器，包括 `StringSerializer`, `ByteArraySerialzier` 等。Kafka 消息的 key 和 value 都需要序列化，序列化器需要在创建生产者客户端时指定：
 ```java
@@ -112,39 +113,52 @@ properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "value_serializer_c
 
 Kafka 提供 `Partitioner` 接口用于定义分区器，通过实现接口可以定义消息对应分区的算法，Kafka 内置了三种分区器实现。
 
-**`DefaultPartitioner`**
+#### `DefaultPartitioner`
 
-`DefaultPartitioner`
-
-**`RoundRobinPartitioner`**
-
-**`UniformStickyPartitioner`**
-
+`DefaultPartitioner` 是 Kafka 默认的分区器，在消息的 key 为空时使用 `StickyPartitioner` 来计算分区，在消息的 key 不为空时则直接将 key 哈希后对消息所属的主题的分区数取模得到当前消息的分区。
 ```java
 public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
-    // 主题的所有分区
-	List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
-    int numPartitions = partitions.size();
-    // key 为 null
     if (keyBytes == null) {
-        // 维护一个整数，每次调用加 1
-        int nextValue = nextValue(topic);
-        // 主题的可用分区
-        List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
-        if (availablePartitions.size() > 0) {
-            int part = Utils.toPositive(nextValue) % availablePartitions.size();
-            return availablePartitions.get(part).partition();
-        } else {
-            // no partitions are available, give a non-available partition
-            return Utils.toPositive(nextValue) % numPartitions;
-        }
+        return stickyPartitionCache.partition(topic, cluster);
+    } 
+    List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+    int numPartitions = partitions.size();
+    // hash the keyBytes to choose a partition
+    return Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions;
+}
+```
+在消息所属的主题的分区数不发生变化的情况下，`DefaultPartition` 保证具有相同的 key 的消息计算到同一个分区，但是主题的分区数如果发生变化，则就无法保证这种对应关系。
+
+#### `RoundRobinPartitioner`
+`RoundRobinPartitioner` 为消息对应的 `topic` 维护了一个计数器，如果消息所属主题的**可用分区**集合不为空则通过将计数器对可用分区数取模得到消息的分区；否则将计数器对**所有分区**取模得到消息的分区。
+```java
+public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+    List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+    int numPartitions = partitions.size();
+    int nextValue = nextValue(topic);
+    List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
+    if (!availablePartitions.isEmpty()) {
+        int part = Utils.toPositive(nextValue) % availablePartitions.size();
+        return availablePartitions.get(part).partition();
     } else {
-        // hash the keyBytes to choose a partition
-        return Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions;
+        // no partitions are available, give a non-available partition
+        return Utils.toPositive(nextValue) % numPartitions;
     }
 }
 ```
-通过实现 ```Partitioner``` 接口可以自定义分区器：
+
+//todo 可用分区 和 所有分区
+
+#### `UniformStickyPartitioner`
+`UniformStickyPartitioner` 缓存了主题上个消息的分区，
+```java
+public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+    return stickyPartitionCache.partition(topic, cluster);
+}
+```
+粘滞分区器
+
+实现 ```Partitioner``` 接口可以自定义分区器：
 ```java
 public class CustomerPartitioner implements Partitioner{
     private final AtomicInteger counter = new AtomicInteger(0);
