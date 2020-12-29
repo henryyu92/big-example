@@ -101,7 +101,7 @@ properties.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "interceptor.class.nam
 ```java
 byte[] serialize(String topic, T data);
 ```
-Kafka 提供了常见的序列化方器，包括 `StringSerializer`, `ByteArraySerialzier` 等。Kafka 消息的 key 和 value 都需要序列化，序列化器需要在创建生产者客户端时指定：
+Kafka 提供了常见的序列化方器，包括 `StringSerializer`, `ByteArraySerialzier` 等，通过实现 `Serializer` 接口也可以自定义序列化算法。Kafka 消息的 key 和 value 都需要序列化，序列化器需要在创建生产者客户端时指定：
 ```java
 properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "key_serializer_class_name");
 properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "value_serializer_class_name");
@@ -158,41 +158,35 @@ public int partition(String topic, Object key, byte[] keyBytes, Object value, by
 ```
 粘滞分区器
 
-实现 ```Partitioner``` 接口可以自定义分区器：
+通过实现 `Partitioner` 接口可以自定义分区算法，分区器需要在创建生产者实例时配置：
 ```java
-public class CustomerPartitioner implements Partitioner{
-    private final AtomicInteger counter = new AtomicInteger(0);
-
-    @override
-    public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster){
-        List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
-        int numberPartitions = partitions.size();
-        if(null == keyBytes){
-            return counter.getAndIncrement() % numberPartitions;
-        }else{
-            return Utils.toPositive(Utils.nurmur2(keyBytes) % numberPartitions);
-        }
-    }
-
-    @override
-    public void close(){}
-
-    @override
-    public void configure(Map<String, ?> configs){}
-    
-}
-```
-使用自定义的分区器需要在创建生产者实例之前配置：
-```java
-properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, CustomerPartitioner.class.getName());
+properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "partitioner_class_name");
 ```
 
 ### 核心流程
 
-生产者客户端最主要的功能是向 `Broker` 集群发送消息，发送消息前需要确定消息所属分区存储的 `Broker`，因此 Kafka 生产者客户端还维护着整个 `Broker` 集群的元数据信息并在集群发生变化时动态的更新这些元数据。
+生产者客户端最主要的功能是向 `Broker` 集群发送消息，消息通过拦截器、分区器和序列化器的作用确定了消息的信息，之后消息就可以通过网络发送到 `Broker`。
+
+消息发送前还需要确定存储消息所在分区的 `Broker`，Kafka 生产者客户端维护着整个 `Broker` 集群的元数据信息，并且在集群发生变化时动态的更新这些元数据。
 
 #### 消息发送
 
+生产者客户端的消息发送
+
+消息在客户端调用生产者发送消息的方法后不会被立即发送到 Broker，其整个的发送流程主要分为三部分：
+
+- 消息经过 `KafkaProducer` 中配置的拦截器、序列化器、分区器以及其他预处理之后会发送到 `RecordAccumulator`
+- `RecordAccumulator` 将消息追加到 `RecordBatch` 并将其缓存到队列中
+- `Sender` 获取缓存在队列中的 `RecordBatch` 并发送到 Broker
+
+```flow
+producer=>start: KafkaProducer
+accumulator=>subroutine: RecordAccumulator
+sender=>subroutine: Sender
+cluster=>end: Broker
+
+producer(right)->accumulator(right)->sender(right)->cluster
+```
 
 #### 元素据更新
 
@@ -248,7 +242,8 @@ private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, H
 }
 ```
 
-### 生产者参数
+### 参数调优
+
 - ```acks```：指定分区中必须有多少个副本收到消息之后才会认为消息写入成功，acks 有三个可选值：
   - ```acks=0```：生产者发送消息后不需要等待任务服务端的响应。如果在消息发送到 broker 的过程中出现网络异常或者 broker 发生异常没有接受消息则会导致消息丢失，但这种配置能够达到最大吞吐量
   - ```acks=1```：默认次设置，生产者发送消息后需要分区 leader 副本响应消息写入成功。如果 leader 写入成功并且在 follower 同步消息之前退出，则从 ISR 中新选举出的 leader 没有这条消息，也会造成消息丢失，这种配置时消息可靠和吞吐量的折中

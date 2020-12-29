@@ -194,20 +194,7 @@ Kafka 实现了三种分区器：
 
 #### 流程分析
 
-消息在客户端调用生产者发送消息的方法后不会被立即发送到 Broker，其整个的发送流程主要分为三部分：
 
-- 消息经过 `KafkaProducer` 中配置的拦截器、序列化器、分区器以及其他预处理之后会发送到 `RecordAccumulator`
-- `RecordAccumulator` 将消息追加到 `RecordBatch` 并将其缓存到队列中
-- `Sender` 获取缓存在队列中的 `RecordBatch` 并发送到 Broker
-
-```flow
-producer=>start: KafkaProducer
-accumulator=>subroutine: RecordAccumulator
-sender=>subroutine: Sender
-cluster=>end: Broker
-
-producer(right)->accumulator(right)->sender(right)->cluster
-```
 
 
 
