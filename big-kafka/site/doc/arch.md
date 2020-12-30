@@ -65,8 +65,6 @@ Kafka 集群由生产者、消费者、Broker 和 ZooKeeper 组成，其中生�
 
 **Docker**
 
-**K8S**
-
 **参数配置**
 
 Kafka 集群启动时会读取 `$KAFKA_HOME/config/server.properties` 文件中设置的参数，通过对这些参数的调优能够使得 Kafka 集群获得更好的性能。
@@ -77,3 +75,4 @@ Kafka 集群启动时会读取 `$KAFKA_HOME/config/server.properties` 文件中�
 - **`log.dir`**：指定 broker 存储数据的地址，默认为 `/tmp/kafak-logs`
 - **`message.max.bytes`**：指定 broker 能接收的消息的最大值，默认为 1000012，超过指定大小的消息被发送到 broker 时会抛出 `RecordTooLargeException`
 
+https://www.cnblogs.com/answerThe/p/11267129.html
