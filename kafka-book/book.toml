@@ -1,0 +1,6 @@
+[book]
+title = "Kafka-Book"
+authors = []
+language = "en"
+multilingual = false
+src = "src"

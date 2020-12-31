@@ -165,9 +165,7 @@ properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "partitioner_class_name"
 
 ### 核心流程
 
-生产者客户端最主要的功能是向 `Broker` 集群发送消息，消息通过拦截器、分区器和序列化器的作用确定了消息的信息，之后消息就可以通过网络发送到 `Broker`。
-
-消息发送前还需要确定存储消息所在分区的 `Broker`，Kafka 生产者客户端维护着整个 `Broker` 集群的元数据信息，并且在集群发生变化时动态的更新这些元数据。
+生产者客户端最主要的功能是向 `Broker` 集群发送消息，消息通过拦截器、分区器和序列化器的作用后通过网络发送到 `Broker`。消息发送前还需要确定存储消息所在分区的 `Broker`，Kafka 生产者客户端维护着整个 `Broker` 集群的元数据信息，并且在集群发生变化时动态的更新这些元数据。
 
 #### 消息发送
 
@@ -181,6 +179,9 @@ cluster=>end: Broker
 
 producer(right)->accumulator(right)->sender(right)->cluster
 ```
+
+
+
 消息并不是直接追加到 `RecordAccumulator`，而是先追加到 `ProducerBatch` 然后再添加到 `RecorAccumulator` 为每个分区维护的双端队列中，如果 `ProducerBatch` 满了则会关闭当前的 Batch 然后创建新的 Batch。`RecordAccumulator` 缓存的大小由参数 `buffer.memory` 设置(默认 32MB)，如果生产者生产消息的速度比发送到 `Broker` 的速度快则在 `RecordAccumulator` 空间不足时阻塞 `max.block.ms`，默认 60000
 
 ```java
@@ -188,7 +189,6 @@ synchronized (dq) {
     // 追加消息到 Accumulator 返回 null 则表示需要创建新的 ProducerBatch
     RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callback, dq);
     if (appendResult != null) {
-        // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
         return appendResult;
     }
     // 创建新的 ProducerBatch
