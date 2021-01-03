@@ -1,8 +1,6 @@
-# 
+# Summary.
 
-- [Kafka 架构](./ch00-00-architecture.md)
-  - [Kafka 拓扑](./ch00-01-topology.md)
-  - [Kafka 术语](./ch00-02-terminology.md)
+- [Kafka 介绍](./ch00-00-introduce.md)
 - [生产者](./ch01-00-producer.md)
   - [客户端](./ch01-01-client.md)
   - [拦截器](./ch01-02-interceptor.md)
@@ -10,6 +8,7 @@
   - [分区器](./ch01-04-partitioner.md)
   - [消息发送](./ch01-05-sender.md)
   - [元数据更新](./ch01-06-metadata.md)
+  - [参数调优](./ch01-07-tuning.md)
 - [消费者](./ch02-00-consumer.md)
   - [客户端](./ch02-01-client.md)
   - [分区分配](./ch02-02-assigner.md)
@@ -17,6 +16,7 @@
   - [拦截器](./ch02-04-interceptor.md)
   - [消费位移](./ch02-05-offset.md)
   - [协调器](./ch02-06-coordinator.md)
+  - [参数调优](./ch02-07-tuning.md)
 - [消息](./ch03-00-message.md)
   - [主题](./ch03-01-topic.md)
   - [分区](./ch03-02-partition.md)
@@ -30,4 +30,5 @@
   - [ReplicaManager](./ch05-02-replica-manager.md)
   - [OffsetManager](./ch05-03-offset-manager.md)
   - [KafkaScheduler](./ch05-04-scheduler.md)
-  - [控制器](./ch05-05-controller.md)  
+  - [控制器](./ch05-05-controller.md)
+- [集群监控](./ch06-00-monitor.md)

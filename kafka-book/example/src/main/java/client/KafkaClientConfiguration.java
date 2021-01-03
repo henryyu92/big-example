@@ -1,4 +1,4 @@
-package example.api.client;
+package client;
 
 public interface KafkaClientConfiguration {
 

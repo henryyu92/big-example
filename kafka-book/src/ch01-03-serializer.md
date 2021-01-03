@@ -1,10 +1,19 @@
 # 序列化器
-序列化器负责将消息序列化成二进制形式，Kafka 提供了 `Serializer` 接口定义序列化器，通过实现接口可以自定义消息的序列化方式：
+
+生产者客户端需要将消息的 key 和 value 序列化成二进制形式，Kafka 提供了 `Serializer` 接口定义的序列化器来完成序列化
+：
 ```java
 byte[] serialize(String topic, T data);
 ```
-Kafka 提供了常见的序列化方器，包括 `StringSerializer`, `ByteArraySerialzier` 等，通过实现 `Serializer` 接口也可以自定义序列化算法。Kafka 消息的 key 和 value 都需要序列化，序列化器需要在创建生产者客户端时指定：
+实现 `Serialize` 接口可以定义序列化器，Kafka 提供了常见的序列化方器，包括 `StringSerializer`, `ByteArraySerialzier` 等，序列化器需要在创建生产者客户端时指定：
 ```java
-properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "key_serializer_class_name");
-properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "value_serializer_class_name");
+properties.put(
+    ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "key_serializer_class_name");
+properties.put(
+    ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "value_serializer_class_name");
+```
+Kafka 提供了常见类型的序列化器，对于复杂的类型可以使用 `Thrif`、`ProtoBuf` 等工具实现：
+```java
+
+// todo ProtoBufSerializer
 ```
