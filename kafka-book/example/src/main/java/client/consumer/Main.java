@@ -1,6 +1,5 @@
 package client.consumer;
 
-import example.api.client.ConfigurationBuilder;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -131,11 +130,11 @@ public class Main {
      * @param broker
      * @param groupId
      */
-    public static void modelConsumer(String broker, String groupId) {
-        Properties properties = ConfigurationBuilder
-                .newConsumerConfigBuilder(broker, groupId)
-                .build();
-    }
+//    public static void modelConsumer(String broker, String groupId) {
+//        Properties properties = ConfigurationBuilder
+//                .newConsumerConfigBuilder(broker, groupId)
+//                .build();
+//    }
 
 
 

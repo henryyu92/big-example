@@ -8,6 +8,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Properties;
 
 public class KafkaConsumerTest {
@@ -39,7 +40,7 @@ public class KafkaConsumerTest {
         // 初始化消费者实例
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
         // 订阅主题
-        consumer.subscribe(Arrays.asList(topic));
+        consumer.subscribe(Collections.singletonList(topic));
         try{
             while (isRunning){
                 // 拉取消息

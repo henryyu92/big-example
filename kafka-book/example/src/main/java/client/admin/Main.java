@@ -1,27 +1,32 @@
 package client.admin;
 
-import example.api.client.ConfigurationBuilder;
-import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.DescribeConsumerGroupsResult;
+import org.apache.kafka.clients.admin.DescribeTopicsResult;
+import org.apache.kafka.clients.admin.ListConsumerGroupsResult;
 import org.apache.kafka.common.KafkaFuture;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 public class Main {
 
-    public static void main(String[] args) throws ExecutionException, InterruptedException {
-        consumerOffset(adminClient("localhost:9092"));
-    }
+//    public static void main(String[] args) throws ExecutionException, InterruptedException {
+//        consumerOffset(adminClient("localhost:9092"));
+//    }
 
 
-    public static AdminClient adminClient(String brokers){
-        Properties properties = ConfigurationBuilder.newAdminConfigBuilder(brokers).build();
-
-        AdminClient admin = KafkaAdminClient.create(properties);
-
-        return admin;
-    }
+//    public static AdminClient adminClient(String brokers){
+//        Properties properties = ConfigurationBuilder.newAdminConfigBuilder(brokers).build();
+//
+//        AdminClient admin = KafkaAdminClient.create(properties);
+//
+//        return admin;
+//    }
 
     public static void createTopic(AdminClient client, String topic, Integer partition, Integer replicaFactor){
 

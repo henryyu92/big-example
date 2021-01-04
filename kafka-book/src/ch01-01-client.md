@@ -59,7 +59,7 @@ public final class RecordMetadata {
 }
 ```
 
-生产者客户端在发送消息的过程中会产生两类异常：可重试异常和不可重试异常。对于可重试异常，如果在创建生产者客户端时配置 `retries(默认 0)` 参数则在发生异常时会自动重试，对于不可重试异常则会直接抛出:
+生产者客户端在发送消息的过程中会产生两类异常：可重试异常和不可重试异常。对于可重试异常，如果在创建生产者客户端时配置 `retries(默认 0)` 参数则在发生异常时会自动重试，对于不可重试异常则会直接抛出。Kafka 生产者客户端保证发送到同一个分区的消息是有序的，并且 callback 也是分区有序的:
 ```java
 producer.send(record, (metadata, exception) -> {
     
@@ -71,11 +71,11 @@ producer.send(record, (metadata, exception) -> {
     }
 });
 ```
-Kafka 生产者客户端保证同一个分区的消息是有序的，callback 也保证分区有序。
 
 ### 脚本工具
 
-Kafka 提供了脚本用于在控制台发送消息，在 `${KAFKA_HOME}/bin` 目录下 `kafka-console-producer.sh` 
+Kafka 提供了通过控制台发送消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-producer.sh` 是 Kafka 提供的生产者脚本工具，可以向集群发送消息。
+
 ```shell script
 bin/kafka-console-producer.sh \
 --bootstrap-server <broker_addr> \

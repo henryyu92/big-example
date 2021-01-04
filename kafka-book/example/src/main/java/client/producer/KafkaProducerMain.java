@@ -64,28 +64,28 @@ public class KafkaProducerMain {
      */
     public static void modelProducer(String broker) {
 
-        Properties properties = ConfigurationBuilder
-                .newProducerConfigBuilder()
-                .keySerializer(StringSerializer.class)
-                .valueSerializer(StringSerializer.class)
-                .brokers(broker)
-                .id("producer.client.demo")
-                .build();
-
-
-        model(properties, "model-topic", "hello kafka");
+//        Properties properties = ConfigurationBuilder
+//                .newProducerConfigBuilder()
+//                .keySerializer(StringSerializer.class)
+//                .valueSerializer(StringSerializer.class)
+//                .brokers(broker)
+//                .id("producer.client.demo")
+//                .build();
+//
+//
+//        model(properties, "model-topic", "hello kafka");
 
     }
 
     public static void retriedProducer(String broker){
-        Properties properties = ConfigurationBuilder.newProducerConfigBuilder()
-                .keySerializer(StringSerializer.class)
-                .valueSerializer(StringSerializer.class)
-                .brokers(broker)
-                .id("producer.client.demo")
-                .retries(10)
-                .build();
-        callbackSend(properties, "retries-topic", "hello callback");
+//        Properties properties = ConfigurationBuilder.newProducerConfigBuilder()
+//                .keySerializer(StringSerializer.class)
+//                .valueSerializer(StringSerializer.class)
+//                .brokers(broker)
+//                .id("producer.client.demo")
+//                .retries(10)
+//                .build();
+//        callbackSend(properties, "retries-topic", "hello callback");
     }
 
     /**
@@ -94,16 +94,16 @@ public class KafkaProducerMain {
      * @param broker
      */
     public static void interceptedProducer(String broker) {
-        Properties properties = ConfigurationBuilder
-                .newProducerConfigBuilder()
-                .keySerializer(StringSerializer.class)
-                .valueSerializer(StringSerializer.class)
-                .brokers(broker)
-                .interceptor(PrefixNameInterceptor.class)
-                .id("producer.client.demo")
-                .build();
-
-        model(properties, "interceptor-topic", "hello kafka");
+//        Properties properties = ConfigurationBuilder
+//                .newProducerConfigBuilder()
+//                .keySerializer(StringSerializer.class)
+//                .valueSerializer(StringSerializer.class)
+//                .brokers(broker)
+//                .interceptor(PrefixNameInterceptor.class)
+//                .id("producer.client.demo")
+//                .build();
+//
+//        model(properties, "interceptor-topic", "hello kafka");
     }
 
     /**

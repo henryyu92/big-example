@@ -15,7 +15,6 @@
         <module>big-hbase</module>
         <module>big-elasticsearch</module>
         <module>big-spark</module>
-        <module>big-kafka</module>
         <module>big-pulsar</module>
         <module>big-zookeeper</module>
     </modules>

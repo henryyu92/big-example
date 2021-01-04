@@ -10,7 +10,9 @@
 
     <properties>
         <scala-version>2.11</scala-version>
+        <scala-lib-version>2.11.12</scala-lib-version>
         <kafka-version>2.4.1</kafka-version>
+        <protobuf-version>3.12.0</protobuf-version>
     </properties>
 
     <repositories>
@@ -34,11 +36,11 @@
 
     <dependencies>
 
-<!--        <dependency>-->
-<!--            <groupId>org.scala-lang</groupId>-->
-<!--            <artifactId>scala-library</artifactId>-->
-<!--            <version>${scala-version}</version>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala-lib-version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.apache.kafka</groupId>
@@ -49,7 +51,7 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.12.0</version>
+            <version>${protobuf-version}</version>
         </dependency>
     </dependencies>
 
@@ -57,7 +59,6 @@
         <profile>
             <id>jdk11</id>
             <activation>
-                <jdk>11</jdk>
                 <activeByDefault>true</activeByDefault>
             </activation>
             <properties>

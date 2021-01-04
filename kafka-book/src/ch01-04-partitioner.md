@@ -2,13 +2,13 @@
 
 消息在发送到 `Broker` 之前需要确定消息的分区，客户端在创建消息 `ProducerRecord` 时如果指定了 `partition` 则消息会被发送到 `partition` 对应的 `Broker`，否则需要根据消息的 `key` 进行计算消息的分区。
 
-Kafka 提供 `Partitioner` 接口定义分区器，通过实现接口可以定义消息对应分区的算法。
+Kafka 提供 `Partitioner` 接口定义分区器，通过实现接口可以定义计算消息对应分区的算法。
 ```java
 public int partition(
     String topic, Object key, byte[] keyBytes, 
     Object value, byte[] valueBytes, Cluster cluster);
 ```
-Kafka 内置了三种分区器，默认使用的是 `DefaultPartitioner`，需要使用其他分区器时需要在创建生产者客户端时设置：
+Kafka 内置了三种分区器，默认使用的是 `DefaultPartitioner`，使用其他分区器时需要在创建生产者客户端时设置：
 ```java
 properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "partitioner_class_name");
 ```
@@ -32,9 +32,11 @@ public int partition(String topic, Object key, byte[] keyBytes, Object value, by
 `RoundRobinPartitioner` 为消息对应的 `topic` 维护了一个计数器，如果消息所属主题的**可用分区**集合不为空则通过将计数器对可用分区数取模得到消息的分区；否则将计数器对**所有分区**取模得到消息的分区。
 ```java
 public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+    // 所有分区
     List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
     int numPartitions = partitions.size();
     int nextValue = nextValue(topic);
+    // 可用分区
     List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
     if (!availablePartitions.isEmpty()) {
         int part = Utils.toPositive(nextValue) % availablePartitions.size();
@@ -45,8 +47,6 @@ public int partition(String topic, Object key, byte[] keyBytes, Object value, by
     }
 }
 ```
-
-//todo 可用分区 和 所有分区
 
 ### `UniformStickyPartitioner`
 `UniformStickyPartitioner` 缓存了主题上个消息的分区，

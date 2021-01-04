@@ -120,13 +120,6 @@
                 <version>1.10.0</version>
             </dependency>
 
-            <!-- Kafka -->
-            <dependency>
-                <groupId>org.apache.kafka</groupId>
-                <artifactId>kafka_${scala-version}</artifactId>
-                <version>${kafka-version}</version>
-            </dependency>
-
             <!-- Pulsar -->
             <dependency>
                 <groupId>org.apache.pulsar</groupId>

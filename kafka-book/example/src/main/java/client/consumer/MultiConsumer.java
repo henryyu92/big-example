@@ -1,11 +1,9 @@
 package client.consumer;
 
-import example.api.client.ConfigurationBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.StringDeserializer;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -36,15 +34,15 @@ public class MultiConsumer {
      */
     public static void multiConsumerThread(String brokers, String groupId, Integer threadNum, String... topics) {
 
-        Properties properties = ConfigurationBuilder
-                .newConsumerConfigBuilder(brokers, groupId)
-                .keyDeserializer(StringDeserializer.class)
-                .valueDeserializer(StringDeserializer.class)
-                .build();
-
-        for (int i = 0; i < threadNum; i++) {
-            new Thread(new ConsumerThread(properties, topics)).start();
-        }
+//        Properties properties = ConfigurationBuilder
+//                .newConsumerConfigBuilder(brokers, groupId)
+//                .keyDeserializer(StringDeserializer.class)
+//                .valueDeserializer(StringDeserializer.class)
+//                .build();
+//
+//        for (int i = 0; i < threadNum; i++) {
+//            new Thread(new ConsumerThread(properties, topics)).start();
+//        }
     }
 
     /**
@@ -64,25 +62,25 @@ public class MultiConsumer {
                 new ArrayBlockingQueue<>(1024),
                 new ThreadPoolExecutor.AbortPolicy());
 
-        Properties properties = ConfigurationBuilder
-                .newConsumerConfigBuilder(brokers, groupId)
-                .build();
-
-        KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(properties);
-        consumer.subscribe(Arrays.asList(topics));
-        try {
-
-            while (true) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-                if (!records.isEmpty()) {
-                    pool.submit(new RecordHandler(records));
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            consumer.close();
-        }
+//        Properties properties = ConfigurationBuilder
+//                .newConsumerConfigBuilder(brokers, groupId)
+//                .build();
+//
+//        KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(properties);
+//        consumer.subscribe(Arrays.asList(topics));
+//        try {
+//
+//            while (true) {
+//                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+//                if (!records.isEmpty()) {
+//                    pool.submit(new RecordHandler(records));
+//                }
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        } finally {
+//            consumer.close();
+//        }
 
     }
 

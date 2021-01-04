@@ -3,7 +3,20 @@ Kafka 以分区作为物理存储单位，每个主题 (Topic) 有一个或多�
 
 Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
 
+### 分区管理
+#### 修改副本因子
+修改副本因子的功能是通过重分配所使用的 ```kafka-reassign-partitions.sh``` 来实现的，只需要在 JSON 文件中增加或减少 replicas 的参数即可：
+```shell
+{
+  "topic":"topic-throttle",
+  "pritition":1,
+  "replicas":[0,1,2],
+  "log_dirs":["any","any","any"]
+}
 
+bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
+--execute --reassignment-json-file add.json
+```
 
 #### 分区重分配
 当集群中的一个节点宕机时，该节点上的分区副本都会失效，Kafka 不会将这些失效的分区副本自动的转移到集群中的其他节点；当新增节点时，只有新创建的主题才能分配到该节点而之前的主题不会自动转移到该节点。
