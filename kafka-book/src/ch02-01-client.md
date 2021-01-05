@@ -1,14 +1,20 @@
 ## 客户端
 
-应用程序通过消费者客户端从 Kafka 集群获取消息消费，消息在集群中是以二进制的形式存储，因此在实例化消费者客户端时除了需要指定集群的地址外，还需要指定 key 和 value 的反序列化方式：
-- `bootstrap.servers`
-- `group.id`
-- `key.deserializer`
-- `value.deserializer`
+Kafka 提供 `KafkaConsumer` 表示消费者客户端，消费者客户端从集群拉取的消息需要反序列化，因此消费者客户端在实例化是必须指定 key 和 value 的反序列化方式。此外，消费者客户端在实例化时需要指定所属的消费组以及 Kafka 集群地址。
+```java
+// Broker 集群地址
+properties.put("bootstrap.servers", "localhost:9092");
+// 消费组 id
+properties.put("group.id", "test-consumer-group");
+// key 反序列化器，需要和生产者序列化器对应
+properties.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+// value 反序列化器，需要和生产者序列化器对应
+properties.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+```
 
+### 订阅消息
 
-### 订阅
-一个消费者可以订阅多个主题，KafkaConsumer 提供了多个重载的方法用于订阅主题：
+Kafka 采用发布/订阅(Pub/Sub)模型，消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了多个重载的订阅主题的方法：
 
 ```java
 // 以集合的方式订阅主题
@@ -20,13 +26,14 @@ subscribe(Pattern pattern, ConsumerRebalanceListener listener)
 // 订阅主题的特定分区
 assign(Collection<TopicPartition> partitions)
 ```
+消费者只能使用一种方式订阅主题，否则会抛出 IllegalStateException 异常。
 
-消费者只能使用一种方式订阅主题，否则会抛出 IllegalStateException 异常。以集合的方式订阅主题时，多次订阅以最后一次为最终订阅的主题；以正则表达式订阅主题时新创建的主题匹配正则表达式也会被消费；订阅主题的特定分区时需要指定主题的特定分区 TopicPartition
+
 
 TopicPartition 表示主题的分区，有两个属性 topic 和 partition 分别表示主题和分区：
 
 ```java
-public final class TopicPartition implements Serializable {
+public final class TopicPartition {
   // 分区
 	private final int partition;
   // 主题
@@ -51,7 +58,6 @@ public class PartitionInfo{
   // 分区 OSR
   private final Node[] offlineReplicas;
 
-  // ...
 }
 ```
 
@@ -143,7 +149,6 @@ public class ConsumerRecord<K, V>{
   // 消息的 CRC32 校验值
   private volatile Long checksum;
 
-  // ...
 }
 ```
 
@@ -199,29 +204,6 @@ public Set<TopicPartition> paused() {
   } finally {
     release();
   }
-}
-```
-
-KafkaConsumer 提供 close 方法关闭消费者并释放运行过程中占用的资源：
-
-```java
-private void close(long timeoutMs, boolean swallowException{
-  // ...
-
-  // 关闭消费者协调器
-  if (coordinator != null)
-    coordinator.close(time.timer(Math.min(timeoutMs, requestTimeoutMs)));
-	
-  // 关闭拦截器、序列化器、Metric 等相关资源
-  ClientUtils.closeQuietly(fetcher, "fetcher", firstException);
-  ClientUtils.closeQuietly(interceptors, "consumer interceptors", firstException);
-  ClientUtils.closeQuietly(metrics, "consumer metrics", firstException);
-  ClientUtils.closeQuietly(client, "consumer network client", firstException);
-  ClientUtils.closeQuietly(keyDeserializer, "consumer key deserializer", firstException);
-  ClientUtils.closeQuietly(valueDeserializer, "consumer value deserializer", firstException);
-  AppInfoParser.unregisterAppInfo(JMX_PREFIX, clientId, metrics);
-
-  //...
 }
 ```
 
@@ -346,5 +328,6 @@ public class ThreadPoolKafkaConsumer {
 ```
 
 使用线程池的方式可以使消费者的 IO 线程和处理线程分开，从而不需要维护过多了 TCP 连接，但是由于是线程池处理消息因此不能保证消息的消费顺序，可以使用一个额外的变量保存消息的 offset，在 KafkaConsumer 拉取消息之前先提交 offset，这在一定程度上可以避免消息乱序，但是有可能造成消息丢失(某些线程处理较小 offset 失败而较大 offset 处理成功则较小 offset 消息丢失，可保存处理失败的 offset 之后同一再次处理)；另外一种思路就是采用滑动窗口的思想 KafkaConsumer 每次拉取一些数据保存在缓存中，处理线程处理缓存中的消息直到全部处理成功。
+
 
 {{#include ../example/src/main/java/client/consumer/Main.java}}

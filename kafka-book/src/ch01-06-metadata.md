@@ -5,3 +5,7 @@
 生产者启动时由于 bootstrap.server 没有配置所有的 broker 节点，因此需要触发元数据更新操作，当分区数量发生变化或者分区 leader 副本发生变化时也会触发元数据更新操作。
 
 客户端的元数据更新是在内部完成的，对外不可见。客户端需要更新元数据时，首先根据 InFlightRequests 获取负载最低的节点 leastLoadedNode(未确认请求最少的节点)，然后向这个节点发送 MetadataRequest 请求来获得元数据信息，更新操作是由 Sender 线程发起，在创建完 MetadataRequest 之后同样会存入 InFlightRequests。
+
+```java
+
+```
