@@ -1,4 +1,4 @@
-## 消息发送
+# 消息发送
 
 生产者客户端采用异步的方式发送消息，消息发送的流程是由两个线程协调完成，主线程负责将消息经拦截器、序列化器以及分区器等处理后缓存到 `RecordAccumulator`，Sender 线程则不断循环的从 `RecordAccumulator` 中取出消息发送到对应的 Broker。
 
@@ -11,7 +11,7 @@ cluster=>end: Broker
 producer(right)->accumulator(right)->sender(right)->cluster
 ```
 
-### `RecordAccumulator`
+## `RecordAccumulator`
 主线程发送的消息缓存在 `RecordAccumulator` 以便可以批量的发送到 Broker，`RecordAccumulator` 定义了两个重要的属性用于缓存的管理：
 ```java
 // 管理缓存内存空间
@@ -48,7 +48,7 @@ buffer = free.allocate(size, maxTimeToBlock);
 
 Kafka 将消息合并为 `ProducerBatch` 发送，这样可以减少网络请求的次数从而提升整体的吞吐，但是如果客户端在 `RecordBatch` 未发送到 `Broker` 前发生故障可会导致消息丢失。
 
-### Sender
+## Sender
 
 主线程将消息缓存到 `RecordAccumulator` 后立即返回，Sender 线程负责将消息批量的发送到对应的 Broker。Sender 线程在 `KafkaProducer` 初始化的时候创建
 ```java

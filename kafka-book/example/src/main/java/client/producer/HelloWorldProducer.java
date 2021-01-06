@@ -10,20 +10,18 @@ import java.util.Properties;
 
 public class HelloWorldProducer {
 
-    private static final String BROKER = System.getProperty("broker", "localhost:9092");
+    private static final String BROKER = System.getProperty("broker", "localhost:19092");
+    private static final String TOPIC = System.getProperty("topic", "topic-hello");
 
     public static void main(String[] args) {
 
-        Map<String, Object> config = new HashMap<String,Object>() {
-            {
-                put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKER);
-                put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-                put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-            }
-        };
+        Properties properties = new Properties();
+        properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKER);
+        properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
-        KafkaProducer<String, String> producer = new KafkaProducer<>(config);
-        ProducerRecord<String, String> record = new ProducerRecord<>("topic-hello", "hello world");
+        KafkaProducer<String, String> producer = new KafkaProducer<>(properties);
+        ProducerRecord<String, String> record = new ProducerRecord<>(TOPIC, "hello world");
         producer.send(record, (metadata, exception) -> {
             if (exception != null) {
                 exception.printStackTrace();

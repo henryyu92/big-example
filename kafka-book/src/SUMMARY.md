@@ -32,6 +32,7 @@
   - [KafkaScheduler](./ch05-04-scheduler.md)
   - [TransactionManager](./ch05-05-transaction.md)
   - [控制器](./ch05-06-controller.md)
+  - [网络协议](./ch05-07-net.md)
 - [集群管理](./ch06-00-cluster.md)
 - [集群监控](./ch07-00-monitor.md)
 - [Kafka Connect](./ch08-00-connect.md)

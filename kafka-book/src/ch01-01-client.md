@@ -1,4 +1,4 @@
-## 客户端
+# 客户端
 
 消息通过生产者客户端发送到集群，Kafka 使用 `KafkaProducer` 表示生产者客户端，在创建实例的时候需要指定必要的参数：
 
@@ -72,7 +72,7 @@ producer.send(record, (metadata, exception) -> {
 });
 ```
 
-### 脚本工具
+## 脚本工具
 
 Kafka 提供了通过控制台发送消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-producer.sh` 是 Kafka 提供的生产者脚本工具，可以向集群发送消息。
 

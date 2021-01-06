@@ -1,6 +1,6 @@
-## 客户端
+# 客户端
 
-Kafka 提供 `KafkaConsumer` 表示消费者客户端，消费者客户端从集群拉取的消息需要反序列化，因此消费者客户端在实例化是必须指定 key 和 value 的反序列化方式。此外，消费者客户端在实例化时需要指定所属的消费组以及 Kafka 集群地址。
+Kafka 提供 `KafkaConsumer` 表示消费者客户端，`KafkaConsumer` 在实例化时需要指定所属的消费组以及 Kafka 集群地址，并且需要指定 key 和 value 的反序列化方式。
 ```java
 // Broker 集群地址
 properties.put("bootstrap.servers", "localhost:9092");
@@ -12,9 +12,9 @@ properties.put("key.deserializer", "org.apache.kafka.common.serialization.String
 properties.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 ```
 
-### 订阅消息
+## 订阅消息
 
-Kafka 采用发布/订阅(Pub/Sub)模型，消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了多个重载的订阅主题的方法：
+Kafka 采用发布/订阅(Pub/Sub)模型，消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
 
 ```java
 // 以集合的方式订阅主题
@@ -26,12 +26,9 @@ subscribe(Pattern pattern, ConsumerRebalanceListener listener)
 // 订阅主题的特定分区
 assign(Collection<TopicPartition> partitions)
 ```
-消费者只能使用一种方式订阅主题，否则会抛出 IllegalStateException 异常。
 
 
-
-TopicPartition 表示主题的分区，有两个属性 topic 和 partition 分别表示主题和分区：
-
+Kafka 客户端提供了订阅主题特定的分区的方法，Kafka 使用 `TopicPartitioin` 表示主题的分区：
 ```java
 public final class TopicPartition {
   // 分区
@@ -40,6 +37,7 @@ public final class TopicPartition {
 	private final String topic;
 }
 ```
+订阅主题的某个分区前需要获取主题的分区信息，`KafkaConsumer` 提供了 `partitionsFor` 方法来获取指定主题的所有分区信息。Kafka 使用 `PartitioinInfo` 表示分区的信息，其中包括了：
 
 使用 ```KafkaConsumer#partitionsFor(topic)``` 查看主题的元数据可以获取主题的分区信息(PartitionInfo)列表，包含主题分区、leader 副本位置，AR集合位置，ISR 集合位置等：
 

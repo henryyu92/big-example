@@ -30,6 +30,8 @@ public class HelloWorldConsumer {
         KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(config);
 
         consumer.subscribe(Collections.singletonList("topic-hello"));
+        // 三种订阅模式混合使用会抛出 IllegalStateException
+        // consumer.subscribe(Pattern.compile("[a-zA-Z-]*hello"));
 
         while (true){
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(10));
