@@ -49,11 +49,6 @@ private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long 
     // or until maxWaitTimeMs is exceeded. This is necessary in case the metadata
     // is stale and the number of partitions for this topic has increased in the meantime.
     do {
-        if (partition != null) {
-            log.trace("Requesting metadata update for partition {} of topic {}.", partition, topic);
-        } else {
-            log.trace("Requesting metadata update for topic {}.", topic);
-        }
         metadata.add(topic);
         int version = metadata.requestUpdate();
         // 唤醒 Sender 线程发送 MetadataRequest
