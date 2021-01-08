@@ -89,3 +89,5 @@ Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 par
 ```java
 
 ```
+
+https://blog.csdn.net/a1240466196/article/details/111350353
