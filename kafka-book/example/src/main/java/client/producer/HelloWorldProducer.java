@@ -23,12 +23,13 @@ public class HelloWorldProducer {
         properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKER);
         properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        properties.setProperty(ProducerConfig.METADATA_MAX_AGE_CONFIG, "200");
+        properties.setProperty(ProducerConfig.METADATA_MAX_AGE_CONFIG, "500");
 
         KafkaProducer<String, String> producer = new KafkaProducer<>(properties);
         List<ProducerRecord<String, String>> records = new ArrayList<>();
         records.add(new ProducerRecord<>(TOPIC, "hello world"));
         records.add(new ProducerRecord<>(TOPIC, "hello kafka"));
+        records.add(new ProducerRecord<>(TOPIC, "hello producer"));
         records.forEach(record ->{
             producer.send(record, (metadata, exception) -> {
                 if (exception != null) {
@@ -39,7 +40,7 @@ public class HelloWorldProducer {
                 }
             });
             try {
-                TimeUnit.MILLISECONDS.sleep(500);
+                TimeUnit.MINUTES.sleep(6);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -47,8 +48,4 @@ public class HelloWorldProducer {
 
         producer.close(Duration.ofSeconds(10));
     }
-
-
-    // 1. Cluster(id = iiiMuA98Rveln-s5KOoaow, nodes = [192.168.10.107:19091 (id: 1 rack: null), 192.168.10.107:19092 (id: 2 rack: null), 192.168.10.107:19093 (id: 3 rack: null)], partitions = [Partition(topic = topic-hello, partition = 0, leader = 2, replicas = [2], isr = [2], offlineReplicas = [])], controller = 192.168.10.107:19091 (id: 1 rack: null))
-
 }

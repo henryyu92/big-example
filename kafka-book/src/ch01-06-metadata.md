@@ -1,6 +1,6 @@
-# 元数据更新
+# 元数据
 
-Kafka 元数据指的是集群的信息，包括主题、分区、节点等信息，生产者客户端发送消息时根据元数据信息将消息发送到分区对应的 Broker 上。Kafka 元数据信息由 `MetadataCache` 表示，元数据的操作由 `Metadata` 完成，`MetadataCache` 包含的实体类 `Cluster` 则保存了集群的相关信息。
+Kafka 元数据指的是集群的信息，包括主题、分区、节点等信息，生产者客户端发送消息时根据元数据信息将消息发送到分区对应的 Broker 上。Kafka 元数据信息由 `MetadataCache` 维护的实体类 `Cluster` 保存。
 ```java
 public final class Cluster {
     
@@ -28,7 +28,28 @@ public final class Cluster {
     private final ClusterResource clusterResource;
 }
 ```
-元数据对象在生产者客户端创建的时候初始化，客户端在发送消息时通过 `waitOnMetadata` 方法获取集群的元数据信息：
+Kafka 元数据的所有操作由 `Metadata` 控制，其内部维护了多个状态变量用于控制元数据的更新。`Metadata` 作为 `KafkaProducer` 的变量在其创建的时候实例化，`Metadata` 在 `KafkaProducer` 中会被多个线程读取，而其更新由 `Sender` 线程完成，为了保证线程安全，其对外暴露的所有方法都是 `synchronized`。
+```java
+public class Metadata extends Closeable {
+    // 更新失败时，backoff 时间
+    private final long refreshBackoffMs;
+    // metadata 失效时间，失效后会强制更新
+    private final long metadataExpireMs;
+    // 更新版本，每次更新 +1
+    private int updateVersion;
+    private int requestVersion;
+    // 上次更新时间
+    private long lastRefreshMs;
+    // 上次更新成功时间
+    private long lastSuccessfulRefreshMs;
+    
+    // ...
+}
+```
+
+## Metadata 更新
+
+`KafkaProducer` 在每次发送消息时都需要调用 `waitOnMetadata` 方法来获取集群的元数据信息，如果元数据不存在则会阻塞的等待元数据更新直到超时。
 ```java
 private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long maxWaitMs) throws InterruptedException {
     Cluster cluster = metadata.fetch();
@@ -80,7 +101,9 @@ private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long 
     return new ClusterAndWaitTime(cluster, elapsed);
 }
 ```
-Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 partition 的信息则会阻塞的更新元数据信息，获取元数据的整个过程时长由客户端参数 `metadata.max.age.ms`(默认 5m)设置，超时则抛出异常，生产者发送的消息如果指定了超出主题范围的分区，则会导致不断重试获取元数据信息直至超时。
+Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 partition 的信息则会阻塞的更新元数据信息，，生产者发送的消息如果指定了超出主题范围的分区，则会导致不断重试获取元数据信息直至超时。
+
+获取元数据的整个过程时长由客户端参数 `metadata.max.age.ms`(默认 5m)设置，超时则抛出异常
 
 消费者客户端的元数据更新也是通过 Sender 线程完成，生产者客户端在初始化时启动 Sender 线程，在线程的
 
@@ -89,3 +112,9 @@ Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 par
 ```java
 
 ```
+
+## Metadata 失效检测
+
+
+## 参考
+- https://blog.csdn.net/chunlongyu/article/details/52622422
