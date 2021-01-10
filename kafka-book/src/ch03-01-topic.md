@@ -1,9 +1,7 @@
 # 主题
-
+主题是消息的归类，是一个逻辑上的概念。
 ## 主题管理
-
 主题管理包括创建、查看、修改、删除主题等操作，Kafka 的主题操作通过 ```$KAFKA_HOME/binkafka-topics.sh``` 脚本执行，其本质是调用 ```kafka.admin.TopicCommand``` 类来执行主题的管理操作。
-
 ### 创建主题
 如果 broker 配置参数 ```auto.create.topics.enable``` 设置为 true(默认)，那么当生产者向一个尚未创建的主题发送消息时会自动创建一个分区数为 ```num.partitions``` (默认为 1)、副本因子为 ```default.replication.facotr``` (默认为 1) 的主题，另外当消费者开始从未知主题中读取消息时或者任意一个客户端向未知主题发送元数据请求时都会按照配置参数的值创建一个相应的主题。不建议将 ```auto.create.topics.enable``` 设置为 true，因为这会增加主题管理与维护的难度。
 
