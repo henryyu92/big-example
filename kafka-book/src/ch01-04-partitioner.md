@@ -2,15 +2,23 @@
 
 消息在发送到 `Broker` 之前需要确定消息的分区，客户端在创建消息 `ProducerRecord` 时如果指定了 `partition` 则消息会被发送到 `partition` 对应的 `Broker`，否则需要根据消息的 `key` 进行计算消息的分区。
 
-Kafka 提供 `Partitioner` 接口定义分区器，通过实现接口可以定义计算消息对应分区的算法。
+Kafka 使用 `Partitioner` 接口定义的分区器计算消息的分区，通过实现分区器接口可以自定义消息的分区算法。
 ```java
-public int partition(
-    String topic, Object key, byte[] keyBytes, 
-    Object value, byte[] valueBytes, Cluster cluster);
+/**
+ * 计算消息的分区
+ *
+ * topic        消息的主题
+ * key          消息的 key，没有指定则为 null
+ * keyBytes     key 的字节数组，没有指定 key 则为 null
+ * value        消息的值
+ * valueBytes   消息值的序列化数组，没有值则为 null
+ * cluster      集群的元数据信息
+ */
+public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster);
 ```
-Kafka 内置了三种分区器，默认使用的是 `DefaultPartitioner`，使用其他分区器时需要在创建生产者客户端时设置：
+Kafka 默认使用 `DefaultPartitioner` 分区器的分区算法，需要显式指定分区器则需要在创建生产者客户端时显式的设置：
 ```java
-properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "partitioner_class_name");
+properties.put("partitioner.class", "partitioner_class_name");
 ```
 ## `DefaultPartitioner`
 
@@ -55,4 +63,3 @@ public int partition(String topic, Object key, byte[] keyBytes, Object value, by
     return stickyPartitionCache.partition(topic, cluster);
 }
 ```
-粘滞分区器

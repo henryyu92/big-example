@@ -1,7 +1,10 @@
 # 元数据
 
-Kafka 元数据指的是集群的信息，包括主题、分区、节点等信息，生产者客户端发送消息时根据元数据信息将消息发送到分区对应的 Broker 上。Kafka 元数据信息由 `MetadataCache` 维护的实体类 `Cluster` 保存。
+Kafka 元数据指的是集群的信息，包括主题、分区、节点等信息，生产者客户端发送消息时根据元数据信息将消息发送到分区对应的 Broker 上。
+
+Kafka 主题信息和分区信息由 `TopicPartition` 以及 `PartitionInfo` 表示，由 `MetadataCache` 维护的实体类 `Cluster` 保存。
 ```java
+// 集群信息
 public final class Cluster {
     
     // 集群节点
@@ -27,6 +30,31 @@ public final class Cluster {
     // 集群信息
     private final ClusterResource clusterResource;
 }
+
+// 主题分区
+public final class TopicPartition {
+    // 分区
+    private final int partition;
+    // 主题
+    private final String topic;
+}
+
+// 分区信息
+public class PartitionInfo{
+    // 主题
+    private final String topic;
+    // 分区号
+    private final int partition;
+    // 分区 leader 副本
+    private final Node leader; 
+    // 分区所有副本(AR)
+    private final Node[] replicas;
+    // 分区 ISR
+    private final Node[] inSynReplicas;
+    // 分区 OSR
+    private final Node[] offlineReplicas;
+
+}
 ```
 Kafka 元数据的所有操作由 `Metadata` 控制，其内部维护了多个状态变量用于控制元数据的更新。`Metadata` 作为 `KafkaProducer` 的变量在其创建的时候实例化，`Metadata` 在 `KafkaProducer` 中会被多个线程读取，而其更新由 `Sender` 线程完成，为了保证线程安全，其对外暴露的所有方法都是 `synchronized`。
 ```java
@@ -47,7 +75,7 @@ public class Metadata extends Closeable {
 }
 ```
 
-## Metadata 更新
+## `Metadata` 更新
 
 `KafkaProducer` 在每次发送消息时都需要调用 `waitOnMetadata` 方法来获取集群的元数据信息，如果元数据不存在则会阻塞的等待元数据更新直到超时。
 ```java
@@ -113,8 +141,9 @@ Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 par
 
 ```
 
-## Metadata 失效检测
+## `Metadata` 失效
 
 
 ## 参考
 - https://blog.csdn.net/chunlongyu/article/details/52622422
+- https://blog.csdn.net/a1240466196/article/details/111350353

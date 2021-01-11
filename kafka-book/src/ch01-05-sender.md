@@ -48,6 +48,11 @@ buffer = free.allocate(size, maxTimeToBlock);
 
 Kafka 将消息合并为 `ProducerBatch` 发送，这样可以减少网络请求的次数从而提升整体的吞吐，但是如果客户端在 `RecordBatch` 未发送到 `Broker` 前发生故障可会导致消息丢失。
 
+### `ProducerBatch`
+
+### `BufferPool`
+
+
 ## Sender
 
 主线程将消息缓存到 `RecordAccumulator` 后立即返回，Sender 线程负责将消息批量的发送到对应的 Broker。Sender 线程在 `KafkaProducer` 初始化的时候创建

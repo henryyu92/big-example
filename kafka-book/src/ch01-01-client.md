@@ -1,16 +1,19 @@
 # 客户端
-
-消息通过生产者客户端发送到集群，Kafka 使用 `KafkaProducer` 表示生产者客户端，在创建实例的时候需要指定必要的参数：
-
-- `bootstrap.servers`：broker 地址列表，具体格式为 `host1:prot1,host2:port2`，这里不需要配置所有 broker 的地址因为生产者会从给定的 broker 里查找到其他 broker 的信息
-- `key.serializer`：消息的 `key` 的序列化类，消息的 `key` 用于计算消息所属的分区
-- `value.serializer`：消息的 `value` 的序列化类，`value` 是实际需要发送的消息，客户端在将消息发送到 broker 之前需要对消息进行序列化处理
-
+`KafkaProducer` 表示 Kafka 的生产者客户端，在创建实例的时候需要指定集群地址以及消息的 key 和 value 的序列化方式。
+```java
+// 指定集群地址，多个以 , 分割，不需要指定所有的机器
+properties.put("bootstrap.servers", "host1:port1,host2:port2");
+// 消息 key 的序列化器
+properties.put("key.serializer", "key_serializer_class_name");
+// 消息 value 的序列化器
+properties.put("value.serializer", "value_serializer_class_name");
+```
 `KafkaProducer` 是线程安全的，因此可以以单例的形式创建，也可以将 `KafkaProducer` 实例进行池化以在高并发的情况下提升系统的吞吐:
 ```java
 // todo KafkaProducerFactory
 ```
 
+## 发送消息
 Kafka 客户端发送的消息并不是单纯意义的消息，而是将消息包装后的 `ProducerRecord` 对象，其包含了多个消息相关的属性：
 ```java
 public class ProducerRecord<K, V> {
@@ -24,7 +27,7 @@ public class ProducerRecord<K, V> {
     private final K key;
     // 消息内容
     private final V value;
-    // 消息创建时间或者追加到日志的时间
+    // 消息创建时间，没有指定则使用当前时间
     private final Long timestamp;
 	
     // ...
@@ -77,7 +80,14 @@ producer.send(record, (metadata, exception) -> {
 Kafka 提供了通过控制台发送消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-producer.sh` 是 Kafka 提供的生产者脚本工具，可以向集群发送消息。
 
 ```shell script
+# --bootstrap-servers 集群地址
+# --topic             主题
+# --partition         分区数，默认为 1
+# --replicas          副本数，默认为 3
+
 bin/kafka-console-producer.sh \
 --bootstrap-server <broker_addr> \
---topic <topic_name>
+--topic <topic_name> \
+--partition <par_cnt> \
+--replicas <rep_cnt>
 ```

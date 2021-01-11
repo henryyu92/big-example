@@ -17,10 +17,10 @@ public ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
 */
 public void onAcknowledgement(RecordMetadata metadata, Exception exception);
 
-// 关闭拦截器时调用
+// 关闭拦截器
 public void close();
 ```
-`ProducerInterceptor` 接口同时继承了 `Configurable` 接口，可以通过 `configure` 方法获取客户端配置的参数。生产者拦截器需要在创建生产者客户端实例时设置，在创建实例的配置中添加配置：
+生产者拦截器需要在创建生产者客户端实例时设置，在创建实例的配置中添加配置：
 ```java
 properties.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "interceptor.class.name");
 ```

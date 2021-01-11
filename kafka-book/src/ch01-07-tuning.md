@@ -1,24 +1,23 @@
 # 参数调优
-- ```acks```：指定分区中必须有多少个副本收到消息之后才会认为消息写入成功，acks 有三个可选值：
-  - ```acks=0```：生产者发送消息后不需要等待任务服务端的响应。如果在消息发送到 broker 的过程中出现网络异常或者 broker 发生异常没有接受消息则会导致消息丢失，但这种配置能够达到最大吞吐量
-  - ```acks=1```：默认次设置，生产者发送消息后需要分区 leader 副本响应消息写入成功。如果 leader 写入成功并且在 follower 同步消息之前退出，则从 ISR 中新选举出的 leader 没有这条消息，也会造成消息丢失，这种配置时消息可靠和吞吐量的折中
-  - ```acks=all```：生产者发送消息后需要分区的 ISR 中所有 follower 副本写入成功之后才能收到写入成功的响应，能够保证可靠性，但是吞吐量会受到很大影响
-- ```max.request.size```：限制客户端能发送的消息的最大值，默认 1M
-- `retries `：配置生产者重试的次数，默认是 0
-- `retry.backoff.ms`：设置重试之间的时间间隔，默认是 100
-- ```compression.type```：指定消息的压缩方式，默认为 "none"，压缩消息可以减少网络传输量从而降低网络 IO，但是压缩/解压缩操作会消耗额外的 CPU 资源
-- ```connections.max.idle.ms```：连接空闲时间，默认 540000ms，超过空闲时间的连接会关闭
-- ```linger.ms```：指定生产者发送 ProducerBatch 之前等待的时间，默认为 0。生产者客户端在 ProducerBatch 填满或者等待时间超过 linger.ms 指定时间就发送，增大此参数会增加消息延时但能提升一定的的吞吐量
-- ```receive.buffer.bytes```：设置 Socket 接受消息缓冲区(SO_RECBUG)的大小，默认为 32768B(32KB)，如果设置为 -1 则使用操作系统的默认值
-- ```send.buffer.bytes```：设置 Socket 发送消息缓冲区(SO_SENDBUF)的大小，默认为 131072B(128KB)，如果设置为 -1 则使用操作系统的默认值
-- ```request.timeout.ms```：配置 Producer 等待请求响应的最长时间，默认值为 30000ms
-- `buffer.memory`  33554432(23M)  生产者客户端中用于缓存消息的缓冲区大小  
-- `batch.size`  16384(16K)  指定 ProducerBatch 可以复用的内存区域大小  
-- `client.id`  ""  设置 KafkaProducer 的 clientId  
-- `max.block.ms`  60000  KafkaProducer 中 send 和 partitionsFor 方法阻塞时长  
-- `partitioner.class`  DefaultPartitioner  指定生产者分区器  
-- `enable.idempotence`  false  是否开启幂等功能  
-- `interceptor.class`  ""  指定生产者拦截器  
-- `max.in.flight.request.per.connection`  5  限制每个连接最多缓存的请求数  
-- `metadata.max.age.ms`  300000(5min)  元数据更新间隔，超过此间隔则强制更新  
-- `transactional.id`  null  指定事务 id，必须唯
+生产者客户端在初始化时可以配置多个参数，这些参数影响着消息发送的整个流程，通过合理的配置这些参数的值可以提升 Kafka 生产者客户端的性能。
+
+
+|参数名|说明|默认值|
+|:-----:|:-----|:-----:|
+|`acks`|指定消息写入成功需要确认的副本数，有三个可选值：<br/> <li>`acks=0` 表示消息从生产者发送之后即认为写入成功，网络异常时消息会丢失</li><li>`acks=1` 表示 leader 副本确认后才返回写入成功，消息同步之前 leader 异常会丢失消息</li><li>`acks=-1`表示 ISR 集合中的所有副本确认后才返回成功，能够保证消息不丢失</li>|1|
+|`retries`|可重试异常时消息发送重试的次数，如果 `max.in.flight.request.per.connection` 值大于 1 则会出现消息乱序|0|
+|`retry.backoff.ms`|消息发送重试之间的时间间隔|100|
+|`buffer.memory`|消息缓冲区的大小，超过之后追加消息会阻塞直至超时|33554432(32M)|
+|`batch.size`|缓冲区中可复用的 ProducerBatch 大小|16384(16K)|
+|`max.block.ms`|获取 Metadata 并且追加消息到缓冲区的超时时间|60000(60s)|
+|`metadata.max.age.ms`|Metadata 更新间隔，超过此间隔则强制更新|30000(5m)|
+|`linger.ms`|没有达到 `batch.size` 的 ProducerBatch 等待时长，超时则发送|0|
+|`max.request.size`|发送的消息(序列化&压缩)大小的最大值，超过大小抛出 `RecordTooLargeException`|1048576(1M)|
+|`compression.type`|消息的压缩算法，有 4 个可选值：none, gzip, snappy, lz4|none
+|`request.timeout.ms`|等待消息发送请求响应的最长时间，超出后会重试|30000(30s)|
+|`max.in.flight.request.per.connection`|每个连接最多缓存的请求数，大于 1 且有重试不保证消息有序|5|
+|`connections.max.idle.ms`|连接最大空闲时长，超时后会关闭连接|540000(9m)|
+|`receive.buffer.bytes`|Socket 接受消息缓冲区(`SO_RCVBUF`)的大小，-1 表示使用操作系统的默认值|32768(32K)|
+|`send.buffer.bytes`|Socket 发送消息缓冲区(`SO_SNDBUF`)的大小，-1 表示使用操作系统的默认值|131072B(128KB)|
+|`enable.idempotence`|设置是否开启幂等功能，用于事务消息|false|
+|`transactional.id`|指定事务 id，必须唯一|null|

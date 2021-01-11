@@ -1,20 +1,19 @@
 # 客户端
-
-Kafka 提供 `KafkaConsumer` 表示消费者客户端，`KafkaConsumer` 在实例化时需要指定所属的消费组以及 Kafka 集群地址，并且需要指定 key 和 value 的反序列化方式。
+`KafkaConsumer` 表示 Kafka 消费者客户端，在创建实例的时候需要指定集群的地址，消息的 key 和 value 的反序列化方式，此外消费者客户端在创建时还需要指定消费者所属的消费组。
 ```java
-// Broker 集群地址
-properties.put("bootstrap.servers", "localhost:9092");
+// Broker 集群地址，不需要指定所有机器
+properties.put("bootstrap.servers", "host:port");
 // 消费组 id
-properties.put("group.id", "test-consumer-group");
+properties.put("group.id", "group-id");
 // key 反序列化器，需要和生产者序列化器对应
-properties.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+properties.put("key.deserializer", "key.deserializer.class.name");
 // value 反序列化器，需要和生产者序列化器对应
-properties.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+properties.put("value.deserializer", "value.deserializer.class.name");
 ```
+消费者客户端在消费消息后需要向集群提交消费位移，在多线程情况下不能保证消费位移的正确提交，因此消费者客户端不是线程安全的。通常在主线程中消费者客户端从集群拉取消息后提交消费位移，然后由下游业务并发的消费消息，这种方式可以极大的提高消费者的吞吐，但是在下游业务消费异常的情况下可能会导致丢失消息。
 
 ## 订阅消息
-
-Kafka 采用发布/订阅(Pub/Sub)模型，消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
+Kafka 采用发布/订阅(Pub/Sub)模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
 
 ```java
 // 以集合的方式订阅主题
@@ -30,33 +29,14 @@ assign(Collection<TopicPartition> partitions)
 
 Kafka 客户端提供了订阅主题特定的分区的方法，Kafka 使用 `TopicPartitioin` 表示主题的分区：
 ```java
-public final class TopicPartition {
-  // 分区
-	private final int partition;
-  // 主题
-	private final String topic;
-}
+
 ```
 订阅主题的某个分区前需要获取主题的分区信息，`KafkaConsumer` 提供了 `partitionsFor` 方法来获取指定主题的所有分区信息。Kafka 使用 `PartitioinInfo` 表示分区的信息，其中包括了：
 
 使用 ```KafkaConsumer#partitionsFor(topic)``` 查看主题的元数据可以获取主题的分区信息(PartitionInfo)列表，包含主题分区、leader 副本位置，AR集合位置，ISR 集合位置等：
 
 ```java
-public class PartitionInfo{
-  // 主题
-  private final String topic;
-  // 分区号
-  private final int partition;
-  // 分区 leader 副本
-  private final Node leader;
-  // 分区所有副本(AR)
-  private final Node[] replicas;
-  // 分区 ISR
-  private final Node[] inSynReplicas;
-  // 分区 OSR
-  private final Node[] offlineReplicas;
 
-}
 ```
 
 结合 partitionsFor 和 assign 就可以订阅主题的指定分区：
