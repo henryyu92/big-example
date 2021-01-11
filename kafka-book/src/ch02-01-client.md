@@ -1,5 +1,5 @@
 # 客户端
-`KafkaConsumer` 表示 Kafka 消费者客户端，在创建实例的时候需要指定集群的地址，消息的 key 和 value 的反序列化方式，此外消费者客户端在创建时还需要指定消费者所属的消费组。
+`KafkaConsumer` 表示 Kafka 消费者客户端，在创建实例的时候需要指定集群的地址，消息的 key 和 value 的反序列化方式，以及消费者所属的消费组。
 ```java
 // Broker 集群地址，不需要指定所有机器
 properties.put("bootstrap.servers", "host:port");
