@@ -80,7 +80,7 @@ producer.send(record, (metadata, exception) -> {
 Kafka 提供了通过控制台发送消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-producer.sh` 是 Kafka 提供的生产者脚本工具，可以向集群发送消息。
 
 ```shell script
-# --bootstrap-servers 集群地址
+# --bootstrap-server  集群地址
 # --topic             主题
 # --partition         分区数，默认为 1
 # --replicas          副本数，默认为 3
