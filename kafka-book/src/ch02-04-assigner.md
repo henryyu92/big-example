@@ -1,27 +1,43 @@
 # 分区分配
-Kafka 提供了消费者客户端参数 ```partition.assignment.strategy``` 参数设置消费者与订阅主题之间的分区分配策略，默认情况下是 ```org.apache.kafka.clients.consumer.RangeAssignor```，除此之外 Kafka 还提供 RoundRobinAssignor 和 StickyAssignor 两种分区分配策略，消费者客户端的分区策略参数可以配置多种分区分配策略。
-#### RangeAssignor
-RangeAssignor 分配策略是基于单个主题的，对于每个主题将分区按照数字顺序排序，将消费者按照字典顺序排序，然后将分区数除以消费者总数以确定要分配给每个消费者的分区数并将分区分配给对应的消费者。如果没有均匀分配，即分区数没有被消费者总数整除，那么前面的消费者将会多分配一个分区。
+消费者客户端拉取的消息是订阅主题中特定分区的消息，Kafka 消费者内部维护了分区分配的策略，使得主题中的分区能够均匀的分配给消费组内的消费者。
 
-例如：有两个消费者 C0 和 C1 都订阅了主题 t0 和 t1，每个主题有 3 个分区，也就是 t0p0、t0p1、t0p2、t1p0、t1p1、t1p2。那么 C0 分配到的分区为 t0p0、t0p1、t1p0、t1p1，C1 分配到的分区为 t0p2、t1p2
+消费者拉取消息时根据设置的分区分配算法计算拉取的分区，然后从指定的分区中拉取消息。Kafka 提供了 `ConsumerPartitionAssignor` 接口定义消费者客户端的分区分配策略：
+```java
+// 根据 Metadata 和订阅信息进行分区分配的算法
+GroupAssignment assign(Cluster metadata, GroupSubscription groupSubscription);
+
+// 返回表示分区器唯一标识的名字
+String name();
+```
+在实现自定义分区算法时通常采用继承 `AbstractPartitionAssignor` 并重写 `assign` 方法。Kafka 内置了三种分区分配策略，默认使用 `RangeAssigner` 策略分配分区，需要显式指定分区策略时可以通过 Kafka 提供的消费者客户端参数 `partition.assignment.strategy` 设置：
+```java
+properties.setProperty("partition.assignment.strategy", "partition-assignment-strategy-class");
+```
+
+## RangeAssignor
+`RangeAssigor` 是 Kafka 的默认分区策略，其思想是按照消费者的数量计算每个消费者分配的分区数，然后将消费者排序之后依次分配。
 ```java
 public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsPerTopic,
                                                 Map<String, Subscription> subscriptions) {
-    Map<String, List<String>> consumersPerTopic = consumersPerTopic(subscriptions);
+    // 每个主题的消费者
+    Map<String, List<MemberInfo>> consumersPerTopic = consumersPerTopic(subscriptions);
+
+    // 初始化每个消费者的分区分配集合
     Map<String, List<TopicPartition>> assignment = new HashMap<>();
     for (String memberId : subscriptions.keySet())
         assignment.put(memberId, new ArrayList<>());
 
-    for (Map.Entry<String, List<String>> topicEntry : consumersPerTopic.entrySet()) {
+    for (Map.Entry<String, List<MemberInfo>> topicEntry : consumersPerTopic.entrySet()) {
         String topic = topicEntry.getKey();
-        List<String> consumersForTopic = topicEntry.getValue();
+        List<MemberInfo> consumersForTopic = topicEntry.getValue();
 
+        // 主题的分区数
         Integer numPartitionsForTopic = partitionsPerTopic.get(topic);
         if (numPartitionsForTopic == null)
             continue;
-
+        // 消费者排序
         Collections.sort(consumersForTopic);
-
+        // 计算每个消费者分配的分区数
         int numPartitionsPerConsumer = numPartitionsForTopic / consumersForTopic.size();
         int consumersWithExtraPartition = numPartitionsForTopic % consumersForTopic.size();
 
@@ -29,132 +45,51 @@ public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsP
         for (int i = 0, n = consumersForTopic.size(); i < n; i++) {
             int start = numPartitionsPerConsumer * i + Math.min(i, consumersWithExtraPartition);
             int length = numPartitionsPerConsumer + (i + 1 > consumersWithExtraPartition ? 0 : 1);
-            assignment.get(consumersForTopic.get(i)).addAll(partitions.subList(start, start + length));
+            assignment.get(consumersForTopic.get(i).memberId).addAll(partitions.subList(start, start + length));
         }
     }
     return assignment;
 }
 ```
-#### RoundRobinAssignor
+当消费者数量超过主题的分区数时，`RangeAssginor` 分区策略会导致大于分区数的消费者无法分配到分区，另外当消费者订阅多个主题的时候会导致某些消费者由于分配了较多的分区负载非常重而某些消费者无法分配到分区而空闲。
+
+例如：有两个消费者 C0 和 C1 都订阅了主题 t0 和 t1，每个主题有 3 个分区，也就是 t0p0、t0p1、t0p2、t1p0、t1p1、t1p2。那么 C0 分配到的分区为 t0p0、t0p1、t1p0、t1p1，C1 分配到的分区为 t0p2、t1p2
+## RoundRobinAssignor
 RoundRobinAssignor 分配策略列出所有可用分区和所有可用消费者，然后从分区到消费者进行循环分配。如果所有消费者订阅的主题相同那么分区的分配是均匀的，如果消费者订阅的主题不同则未订阅主题的消费者跳过而不分配分区。
-- 消费者订阅相同：有两个消费者 C0 和 C1 都订阅了主题 t0 和 t1，每个主题有 3 个分区，也就是 t0p0、t0p1、t0p2、t1p0、t1p1、t1p2。那么 C0 分配到的分区为 t0p0、t0p2、t1p1，C1 分配到的分区为 t0p1、t1p0、t1p2
-- 消费者订阅不同：有三个消费者 C0, C1 和 C2，三个主题 t0、t1 和 t2，分别有 1, 2, 3 个分区，也就是 t0p0、t1p0、t1p1、t2p0、t2p1、t2p2，C0 订阅了 t0，C1 订阅了 t0 和 t1，C2 订阅了 t0、t1、t2。那么 C0 分配到的分区为 t0p0，C1 分配到的分区为 t1p0，C2 分配到的分区为 t1p1、t2p0、t2p1、t2p2
 ```java
 public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsPerTopic,
                                                 Map<String, Subscription> subscriptions) {
     Map<String, List<TopicPartition>> assignment = new HashMap<>();
-    for (String memberId : subscriptions.keySet())
-        assignment.put(memberId, new ArrayList<>());
+    List<MemberInfo> memberInfoList = new ArrayList<>();
+    for (Map.Entry<String, Subscription> memberSubscription : subscriptions.entrySet()) {
+        assignment.put(memberSubscription.getKey(), new ArrayList<>());
+        // 所有的消费者
+        memberInfoList.add(new MemberInfo(memberSubscription.getKey(),
+                                          memberSubscription.getValue().groupInstanceId()));
+    }
+    // 所有消费者排序
+    CircularIterator<MemberInfo> assigner = new CircularIterator<>(Utils.sorted(memberInfoList));
 
-    CircularIterator<String> assigner = new CircularIterator<>(Utils.sorted(subscriptions.keySet()));
     for (TopicPartition partition : allPartitionsSorted(partitionsPerTopic, subscriptions)) {
         final String topic = partition.topic();
-        while (!subscriptions.get(assigner.peek()).topics().contains(topic))
+        // 如果消费者订阅了分区对应主题则分配
+        while (!subscriptions.get(assigner.peek().memberId).topics().contains(topic))
             assigner.next();
-        assignment.get(assigner.next()).add(partition);
+        assignment.get(assigner.next().memberId).add(partition);
     }
     return assignment;
 }
 ```
-#### StickyAssignor
-StickyAssignor 分区策略有两个目的：
+- 消费者订阅相同：有两个消费者 C0 和 C1 都订阅了主题 t0 和 t1，每个主题有 3 个分区，也就是 t0p0、t0p1、t0p2、t1p0、t1p1、t1p2。那么 C0 分配到的分区为 t0p0、t0p2、t1p1，C1 分配到的分区为 t0p1、t1p0、t1p2
+- 消费者订阅不同：有三个消费者 C0, C1 和 C2，三个主题 t0、t1 和 t2，分别有 1, 2, 3 个分区，也就是 t0p0、t1p0、t1p1、t2p0、t2p1、t2p2，C0 订阅了 t0，C1 订阅了 t0 和 t1，C2 订阅了 t0、t1、t2。那么 C0 分配到的分区为 t0p0，C1 分配到的分区为 t1p0，C2 分配到的分区为 t1p1、t2p0、t2p1、t2p2
+
+## StickyAssignor
+
+`StickyAssignor` 分区策略能够保证消费者分配的分区尽可能均衡，StickyAssignor 分区策略有两个目的：
 - 分区的分配要尽可能均匀，即消费者分配到的分区数量相差最多只有 1 个
 - 当发生分区重分配时，分区的分配尽可能与之前的分配保持同步
   
 例如有三个消费者 C0, C1 和 C2 都订阅了四个主题 t0, t1, t2, t3 并且每个主题有两个分区，即 t0p0, t0p1, t1p0, t1p1, t2p0, t2p1, t3p0, t3p1。那么 C0 分配到 t0p0, t1p1, t3p0，C1 分配到 t0p1, t2p0, t3p1，C2 分配到 t1p0, t2p1。如果消费者 C1 故障导致消费组发生再均衡操作，此时消费分区会重新分配，则 C0 分配到 t0p0, t1p1, t3p0, t2p0 而 C2 分配到 t1p0, t2p1, t0p1, t3p1
-
-#### 自定义分区分配策略
-自定义分区分配策略需要实现 ```org.apache.kafka.clients.consumer.internal.PartitionAssignor``` 接口或者继承 ```org.apache.kafka.clients.consumer.internals.AbstractPartitionAssignor``` 类。
-
-PartitionAssignor 接口中定义了两个内部类：Subscription 和 Assignment。
-
-Subscription 用来表示消费者的订阅信息，topics 表示消费者的订阅主题列表，userData 表示用户自定义信息：
-```java
-class Subscription {
-  private final List<String> topics;
-  private final ByteBuffer userData;
-  // ...
-}
-```
-PartitionAssignor 接口通过 subscription 方法来设置消费者自身相关的 Subscription 信息。
-
-Assignment 类用来表示分配结果信息，partition 表示所分配到的分区集合，userData 表示用户自定义的数据：
-```java
-class Assignment {
-  private final List<TopicPartition> partitions;
-  private final ByteBuffer userData;
-  // ...
-}
-```
-PartitionAssignor 接口中的 onAssignment 方法是在每个消费者收到消费组 leader 分配结果时的回调函数。
-
-真正的分区分配方案的实现是在 assign 方法中，方法中的参数 metadata 表示集群的元数据信息，而 subscriptions 表示消费组内各个消费者成员的订阅信息，方法返回各个消费者的分配信息。
-
-```java
-public class RandomAssignor extends AbstractPartitionAssignor{
-  public String name(){
-    return "random";
-  }
-  public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsPerTopic, Map<String, Subscription> subscriptions){
-    Map<String, List<String>> consumersPerTopic = consumersPerTopic(subscriptions);
-    Map<String, List<TopicPartition>> assignment = new HashMap<>();
-    for(String memberId : subscriptions.keySet()){
-      assignment.put(memberId, new ArrayList<>());
-    }
-
-    for(Map.Entry<String, List<String>> topicEntry : consumersPerTopic.entrySet()){
-      String topic = topicEntry.getKey();
-      List<String> consumersForTopic = topicEntry.getValue();
-      int consumerSize = consuemrForTopic.size();
-
-      Integer numPartitionsForTopic = partitionsPerTopic.get(topic);
-      if(numPartitionsForTopic == null){
-        continue;
-      }
-
-      List<TopicPartition> partitions = AbstractPartitionAssinor.partitions(topic, numPartitionsForTopic);
-      for(TopicPartition partition : partitions){
-        int rand = new Random().nextInt(consumerSize);
-        String randomConsumer = consumersForTopic.get(rand);
-        assignment.get(randomConsumer).add(partition);
-      }
-    }
-    return assignment;
-  }
-
-  private Map<String, List<String>> consumersPerTopic(Map<String, Subscription> consumerMetadata){
-    Map<String, List<String>> res = new HashMap<>();
-    for(Map.Entry<String, Subscription> subscriptionEntry : consumerMetadata.entrySet()){
-      String consumerId = subscriptionEntry.getKey();
-      for(String topic : subscriptionEntry.getValue().topics()){}
-        put(res, topic, consuemrId)
-    }
-    return res;
-  }
-}
-```
-在使用自定义分区分配时，需要在消费者客户端添加配置参数：
-```java
-properties.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, RandomAssignor.class.getName());
-```
-通过自定义分区策略可以使一个分区分配给同一消费组内的多个消费者，继而实现消费组内广播的功能：
-```java
-public class BroadcastAssigner extends AbstractPartitionAssinger{
-  
-}
-```
-通过自定义分区器，可以实现在同一个消费组中的不同消费者消费同一个分区中的消息，但是同一个消费组中的消费者不能消费同一个消息。
-
-####  消费者协调器
-当消费者配置了不同的分区策略，多个消费者之间的分区分配需要通过消费者协调器(ConsumerCoordinator) 和组协调器(GroupCoordinator) 来完成。
-
-Kafka 旧版本客户端使用 ZooKeeper 监听完成消费者分区分配之间的协调工作。每个消费组在 ZK 上维护了 /consumer/<group> 路径，其下有三个子路径：
-- ids：使用临时节点存储消费组中的消费者信息，临时节点路径名为 consumer.id_主机名-时间戳-UUID 
-- owners：记录分区和消费者的对应关系
-- offsets：记录消费组中消息的 offset
-
-每个 broker、topic 和 partition 在 ZK 上
-
 
 ### 再均衡
 

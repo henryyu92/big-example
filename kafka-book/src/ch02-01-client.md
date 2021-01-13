@@ -10,10 +10,9 @@ properties.put("key.deserializer", "key.deserializer.class.name");
 // value 反序列化器，需要和生产者序列化器对应
 properties.put("value.deserializer", "value.deserializer.class.name");
 ```
-消费者客户端在消费消息后需要向集群提交消费位移，在多线程情况下不能保证消费位移的正确提交，因此消费者客户端不是线程安全的。通常在主线程中消费者客户端从集群拉取消息后提交消费位移，然后由下游业务并发的消费消息，这种方式可以极大的提高消费者的吞吐，但是在下游业务消费异常的情况下可能会导致丢失消息。
-## 订阅消息
-Kafka 采用发布/订阅(Pub/Sub)模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
+消费者客户端在消费消息后需要向集群提交消费位移，在多线程情况下不能保证消费位移的正确提交，因此消费者客户端不是线程安全的。
 
+Kafka 采用发布/订阅(Pub/Sub)模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
 ```java
 // 以集合的方式订阅主题
 subscribe(Collection<String> topics, ConsumerRebalanceListener listener)
@@ -40,7 +39,7 @@ void onPartitionsRevoked(Collection<TopicPartition> partitions);
 // 再均衡后消费者开始拉取消息前调用，通常会重新定位拉取消息的 offset
 void onPartitionsAssigned(Collection<TopicPartition> partitions);
 ```
-订阅了主题的消费者客户端可以通过 `KafkaConsumer#unsbuscribe()` 方法取消订阅，取消订阅后消费者拉取消息会抛出异常，此时消费者客户端的数量发生变化，会触发消费组内的消费者重新分配分区。
+订阅了主题的消费者客户端可以通过 `KafkaConsumer#unsbuscribe()` 方法取消订阅，取消订阅后消费者拉取消息会抛出异常。取消订阅主题后消费者客户端的数量发生变化，会触发消费组内的消费者重新分配分区。
 
 ## 消息消费
 
@@ -51,10 +50,7 @@ Kafka 消费者客户端的消息消费是基于拉模式的，消费者不断�
 // 等待 timeout 后如果没有消息则返回空集合
 public ConsumerRecords<K, V> poll(final Duration timeout)
 ```
-
-
-poll 返回的是 ConsumerRecords，其中维护着 Map<TopicPartition, List<ConsumerRecord<K, V>>> 数据类型的消息，ConsumerRecord 是真正消费的消息，包含消费消息的各种信息：
-
+`KafkaConsumer` 拉取的消息是 `ConsumerRecords` 表示的集合，其中包含每个主题的消息列表，当主题没有新的消息时，对应的消息列表为空。消息列表中的对象是 `ConsumerRecord` 表示 Kafka 消费者客户端真正消费的消息：
 ```java
 // 分区-消息集合
 public class ConsumerRecords{
@@ -89,63 +85,10 @@ public class ConsumerRecord<K, V>{
 
 }
 ```
-
-ConsumerRecords 提供了 iterator 方法遍历集合获取每个 ConsumerRecord 来消费拉取的消息：
-
-```java
-public Iterator<ConsumerRecord<String, String>> it = records.iterator();
-while(it.hasNext()){
-  ConsumerRecord<String, String> record = it.next();
-  // ...
-}
-```
-
-除了遍历 ConsumerRecords 来一条条的消费消息外，ConsumerRecords 还提供了 partitions 方法获取消息集中的分区并提供 records 方法用于按照分区划分消息集：
-
-```java
-// 按分区分组拉取的消息
-for(TopicPartition tp : records.partitions()){
-	for (ConsumerRecord record : records.records(tp)){
-		System.out.println(record);
-	}
-}
-
-// 按主题分组拉取的消息
-for (ConsumerRecord record : records.records(topic)){
-	System.out.println(record);
-}
-```
-
-ConsumerRecords 提供了 count 方法计算消息集中的消息数量，isEmpty 方法用于判断消息集是否为空
-
-### 控制或关闭消费
-
-KafkaConsumer 提供了对消费者消费速度的控制，KafkaConsumer 提供 pause 方法和 resume 方法分别实现暂停某些分区的拉取操作和恢复某些分区的拉取操作：
-
-```java
-public void pause(Collection<TopicPartition> partitions)
-
-public void resume(Collection<TopicPartition> partitions)
-```
-
-KafkaConsumer 还提供了 wakeup 方法退出 poll 方法的逻辑并抛出 WakeupException 异常，paused 方法查看被暂停的分区：
-
-```java
-public void wakeup() {
-  this.client.wakeup();
-}
-
-public Set<TopicPartition> paused() {
-  acquireAndEnsureOpen();
-  try {
-    return Collections.unmodifiableSet(subscriptions.pausedPartitions());
-  } finally {
-    release();
-  }
-}
-```
+`KafkaConsumer` 提供了对消息消费的控制，`pause(partitions)` 和 `resume(partitions)` 方法可以控制暂停和回复拉取指定分区的消息，通过 `paused()` 方法可以查看暂停拉取消息的分区。
 
 ### 多线程消费
+`KafkaConsumer` 是非线程安全的，在下游消息消费业务比较耗时的情况下会降低消息消费的速率。
 
 KafkaConsumer 是非线程安全的，每个 KafkaConsumer 都维护着一个 TCP 连接，可以通过每个线程创建一个 KafkaConsumer 实例实现多线程消费：
 
@@ -266,3 +209,15 @@ public class ThreadPoolKafkaConsumer {
 ```
 
 使用线程池的方式可以使消费者的 IO 线程和处理线程分开，从而不需要维护过多了 TCP 连接，但是由于是线程池处理消息因此不能保证消息的消费顺序，可以使用一个额外的变量保存消息的 offset，在 KafkaConsumer 拉取消息之前先提交 offset，这在一定程度上可以避免消息乱序，但是有可能造成消息丢失(某些线程处理较小 offset 失败而较大 offset 处理成功则较小 offset 消息丢失，可保存处理失败的 offset 之后同一再次处理)；另外一种思路就是采用滑动窗口的思想 KafkaConsumer 每次拉取一些数据保存在缓存中，处理线程处理缓存中的消息直到全部处理成功。
+
+
+## 脚本工具
+
+```shell script
+# --bootstrap-server    集群地址
+# --group-id            消费组
+# --topic               订阅主题
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+--group-id  group-hello \
+--topic topic-hello
+```

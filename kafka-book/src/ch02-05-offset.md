@@ -160,7 +160,7 @@ for(TopicPartition tp : partitions){
 使用 seek 方法可以不使用内部主题 ```__consumer_offsets``` 中而可以存储在任意介质中，在拉取消息之读取位移然后使用 seek 设置分区位移可以实现消费位移的完全控制。
 
 
-#### `__consumer_offset`
+### `__consumer_offset`
 位移提交的内容最终会保存到 Kafka 的内部主题 __consumer_offsets 中。一般情况下，当集群中第一次有消费者消费消息时会自动创建主题 __consumer_offsets，副本因子可以通过 ```offsets.topic.replication.factor``` 参数设置，分区数可以通过 ```offsets.topic.num.partitions``` 参数设置
 
 客户端提交消费位移是使用 OffsetConmmitRequest 请求实现的，OffsetCommitRequest 的结构如下：
