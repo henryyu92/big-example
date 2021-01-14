@@ -1,5 +1,5 @@
 # 分区分配
-消费者客户端拉取的消息是订阅主题中特定分区的消息，Kafka 消费者内部维护了分区分配的策略，使得主题中的分区能够均匀的分配给消费组内的消费者。
+消费者客户端拉取的是订阅主题中特定分区的消息，Kafka 消费者内部维护了分区分配的策略，使得主题中的分区能够均匀的分配给消费组内的消费者。
 
 消费者拉取消息时根据设置的分区分配算法计算拉取的分区，然后从指定的分区中拉取消息。Kafka 提供了 `ConsumerPartitionAssignor` 接口定义消费者客户端的分区分配策略：
 ```java
@@ -9,7 +9,7 @@ GroupAssignment assign(Cluster metadata, GroupSubscription groupSubscription);
 // 返回表示分区器唯一标识的名字
 String name();
 ```
-在实现自定义分区算法时通常采用继承 `AbstractPartitionAssignor` 并重写 `assign` 方法。Kafka 内置了三种分区分配策略，默认使用 `RangeAssigner` 策略分配分区，需要显式指定分区策略时可以通过 Kafka 提供的消费者客户端参数 `partition.assignment.strategy` 设置：
+在实现自定义分区算法时通常继承 `AbstractPartitionAssignor` 并重写 `assign` 方法。Kafka 内置了三种分区分配策略，默认使用 `RangeAssigner` 策略分配分区，需要显式指定分区策略时可以通过 Kafka 提供的消费者客户端参数 `partition.assignment.strategy` 设置：
 ```java
 properties.setProperty("partition.assignment.strategy", "partition-assignment-strategy-class");
 ```
@@ -35,7 +35,7 @@ public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsP
         Integer numPartitionsForTopic = partitionsPerTopic.get(topic);
         if (numPartitionsForTopic == null)
             continue;
-        // 消费者排序
+        // 消费者排序(根据 groupId 和 memberId 排序)
         Collections.sort(consumersForTopic);
         // 计算每个消费者分配的分区数
         int numPartitionsPerConsumer = numPartitionsForTopic / consumersForTopic.size();
@@ -55,7 +55,7 @@ public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsP
 
 例如：有两个消费者 C0 和 C1 都订阅了主题 t0 和 t1，每个主题有 3 个分区，也就是 t0p0、t0p1、t0p2、t1p0、t1p1、t1p2。那么 C0 分配到的分区为 t0p0、t0p1、t1p0、t1p1，C1 分配到的分区为 t0p2、t1p2
 ## RoundRobinAssignor
-RoundRobinAssignor 分配策略列出所有可用分区和所有可用消费者，然后从分区到消费者进行循环分配。如果所有消费者订阅的主题相同那么分区的分配是均匀的，如果消费者订阅的主题不同则未订阅主题的消费者跳过而不分配分区。
+`RoundRobinAssignor` 分配策略列出所有可用分区和所有可用消费者，然后从分区到消费者进行循环分配。如果所有消费者订阅的主题相同那么分区的分配是均匀的，如果消费者订阅的主题不同则未订阅主题的消费者跳过而不分配分区。
 ```java
 public Map<String, List<TopicPartition>> assign(Map<String, Integer> partitionsPerTopic,
                                                 Map<String, Subscription> subscriptions) {

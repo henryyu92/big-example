@@ -5,6 +5,8 @@ Kafka 分区的每个消息都有唯一的 offset 表示消息在分区中的位
 
 消费者在消费完消息之后需要向 broker 提交下次发送数据的 offset，即当前消息集最后一个消息的 offset + 1。
 
+
+## 位移提交
 消费者中有 position 和 committed offset 的概念，分别表示下一次拉取的消息的起始位移和已经提交过的消费位移。KafkaConsumer 提供了 ```position(TopicPartition)``` 和 ```committed(TopicPartition)``` 两个方法获取 position 和 committed offset。
 ```java
 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
@@ -99,7 +101,7 @@ try{
   }
 }
 ```
-#### 指定位移消费
+### 指定位移消费
 
 Kafka 中当消费者查找不到所记录的消费位移或者位移越界时，就会根据消费者客户端参数 ```auto.offset.reset``` 的配置决定消费消息的起始位置，默认是 "latest" 表示从分区末尾开始消费，如果设置为 "earliest" 则表示从头(也就是 0)开始消费，如果设置为 "none" 则表示在获取不到消费位移时抛出 NoOffsetForPartitionException 异常。
 
@@ -160,29 +162,5 @@ for(TopicPartition tp : partitions){
 使用 seek 方法可以不使用内部主题 ```__consumer_offsets``` 中而可以存储在任意介质中，在拉取消息之读取位移然后使用 seek 设置分区位移可以实现消费位移的完全控制。
 
 
-### `__consumer_offset`
-位移提交的内容最终会保存到 Kafka 的内部主题 __consumer_offsets 中。一般情况下，当集群中第一次有消费者消费消息时会自动创建主题 __consumer_offsets，副本因子可以通过 ```offsets.topic.replication.factor``` 参数设置，分区数可以通过 ```offsets.topic.num.partitions``` 参数设置
 
-客户端提交消费位移是使用 OffsetConmmitRequest 请求实现的，OffsetCommitRequest 的结构如下：
-- group_id
-- generation_id
-- member_id
-- retention_time 表示当前提交的消费位移所能保留的时长，通过 ```offsets.retention.minutes``` 设置
-- topics
 
-最终提交的消费位移会以消息的形式发送到主题 __consumer_offsets，与消费位移对应的消息也只定义了 key 和 value 字段的具体内容，它不依赖于具体版本的消息格式，以此做到与具体的消息格式无关。
-
-在处理完消费位移之后，Kafka 返回 OffsetCommitResponse 给客户端，OffsetCommitResponse 的结构如下：
-```java
-```
-可以通过 ```kafka-console-consumer.sh``` 脚本来查看 __consumer_offsets 中的内容：
-```shell
-```
-如果有若个案消费者消费了某个主题的消息，并且也提交了相应的消费位移，那么在删除这个主题之后会一并将这些消费位移信息删除。
-
-#### 消费位移管理
-```kafka-consumer-groups.sh``` 脚本提供了通过 reset-offsets 指令来重置消费组内的消费位移，前提是该消费组内没有消费者运行：
-```shell
-bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
---group groupIdMonitor --all-topics --reset-offsets --to-earliest
-```

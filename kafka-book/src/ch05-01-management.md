@@ -73,6 +73,13 @@ bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 --delete --group groupIdMonitor
 ```
 
+#### 消费位移管理
+```kafka-consumer-groups.sh``` 脚本提供了通过 reset-offsets 指令来重置消费组内的消费位移，前提是该消费组内没有消费者运行：
+```shell
+bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+--group groupIdMonitor --all-topics --reset-offsets --to-earliest
+```
+
 ## KafkaAdminClient
 KafkaAdminClient 提供了 API 的方式对 Kafka 的主题、brokers、配置和 ACL 的管理：
 ```java

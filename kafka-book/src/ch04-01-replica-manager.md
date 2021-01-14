@@ -1,4 +1,11 @@
-# 副本
+# ReplicaManager
+
+
+## Leader 选举
+
+
+## CheckPoint
+
 每个分区有多个副本，Kafka 保证同一个分区的副本分布在不同的节点上。分区的所有副本集合为 AR(Assigned Replica)，和 leader 副本保持同步的 follower 副本集合为 ISR(In-sync Replica)，未能和 leader 副本保持同步的 follower 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR + leader。
 
 副本的 LEO (LogEndOffset) 表示副本中最后一条消息的 offset + 1，ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息，因此消息只有在 ISR 中所有的副本同步之后才能被消费者拉取到。**ISR 发生变化或者 ISR 中任意一个副本的 LEO 发生变化都可能影响整个分区的 HW**

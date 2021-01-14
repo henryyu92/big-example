@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * TTL
  */
-public class TTLInterceptor implements ConsumerInterceptor<String, String> {
+public class TTLRecordInterceptor implements ConsumerInterceptor<String, String> {
 
     private static final long EXPIRE_INTERVAL = TimeUnit.SECONDS.toMillis(10);
 

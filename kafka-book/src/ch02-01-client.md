@@ -87,129 +87,53 @@ public class ConsumerRecord<K, V>{
 ```
 `KafkaConsumer` 提供了对消息消费的控制，`pause(partitions)` 和 `resume(partitions)` 方法可以控制暂停和回复拉取指定分区的消息，通过 `paused()` 方法可以查看暂停拉取消息的分区。
 
-### 多线程消费
-`KafkaConsumer` 是非线程安全的，在下游消息消费业务比较耗时的情况下会降低消息消费的速率。
+## 并发消费
+`KafkaConsumer` 是非线程安全的，在对外的方法中会通过 `aquire()` 方法检测时候有多个线程操作同一个 `KafkaConsumer` 对象，如果发现有其他线程正在操作则会抛出 `ConcurrentModificationException`。
 
-KafkaConsumer 是非线程安全的，每个 KafkaConsumer 都维护着一个 TCP 连接，可以通过每个线程创建一个 KafkaConsumer 实例实现多线程消费：
+消费者客户端和下游业务绑定，如果下游业务负载较重则会影响整个 Kafka 的吞吐量，此外堆积在 Broker 中的消息也有可能因为日志清理机制被清理从而导致消息丢失。
 
+Kafka 消费者客户端不允许多个线程操作，但是借助于 Kafka 消费组，我们直接在相同的消费组中增加订阅相同主题的消费者客户端即可线性的增加消费者的吞吐量(消费者客户端数量不超过分区数量)。
 ```java
-public class MultiThreadKafkaConsumer {
+public class ConsumerThread<K,V> implements Runnable {
+  
+  private final KafkaConsumer<K, V> consumer;
 
-    public static final String broker = "localhost:9092";
-    public static final String topic = "topic-demo";
-    public static final String groupId = "group-demo";
+  public ConsumerThread(String broker, String group, Collection<String> topics, K keyDeserializer, V valueDeserializer){
+    Properties properties = new Properties();
+    properties.setProperty("bootstrap.servers", broker);
+    properties.setProperty("group.id", group);
+    properties.setProperty("key.deserializer", keyDeserializer.getClass().getName());
+    properties.setProperty("value.deserializer", valueDeserializer.getClass().getName());
 
-    public static Properties initConfig(){
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.CLIENT_ID_CONFIG, "client-demo");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
-
-        return props;
-    }
-    public static void main(String[] args) {
-
-        Properties props = initConfig();
-        int consumerThreadNum = 4;
-        for (int i = 0; i < consumerThreadNum; i++){
-            new KafkaConsumerThread(props, topic).start();
-        }
-    }
-
-    public static class KafkaConsumerThread extends Thread{
-
-        private KafkaConsumer<String, String> kafkaConsumer;
-        public KafkaConsumerThread(Properties props, String topic){
-            this.kafkaConsumer = new KafkaConsumer<>(props);
-            kafkaConsumer.subscribe(Arrays.asList(topic));
-        }
-
-        @Override
-        public void run() {
-            try{
-                while (true){
-                    ConsumerRecords<String, String> records = kafkaConsumer.poll(Duration.ofMillis(1000));
-                    for (ConsumerRecord<String, String> record : records){
-                        // process
-                    }
-                }
-            }catch (Exception e){
-                e.printStackTrace();
-            }finally {
-                kafkaConsumer.close();
-            }
-        }
+    consumer = new KafkaConsumer<K, V>(properties);
+    consumer.subscribe(topics);
+  }
+ 
+    @Override
+    public void run() {
+      // ...
     }
 }
 ```
+创建多个消费者可以提高消费者客户端的吞吐量，但是线程之间的频繁切换会消耗较多的系统资源。通过将 Kafka 消费者客户端与下游业务处理解耦是提升吞吐量的另外一种方式，此时消费者客户端作为 I/O 线程负责拉取消息和提交消费位移，而下游处理程序则负责消息的处理。
 
-因为每个 KafkaConsumer 都维护一个 TCP 连接，当 KafkaConsumer 比较多时会造成比较大的开销。可以只实例化一个 KafkaConsumer 作为 I/O 线程，另外创建线程处理消息：
-
+使用消费者客户端线程拉取消息并记录分区的消费位移，在业务端通过线程池的方式处理消费者客户端拉取的消息，当业务消费失败时可以通过消费者客户端的 `seek()` 方法重新定位到上次消费的地方从而避免消息丢失。
 ```java
-public class ThreadPoolKafkaConsumer {
+public static class RecordHandler implements Runnable {
 
-    public static final String broker = "localhost:9092";
-    public static final String topic = "topic-demo";
-    public static final String groupId = "group-demo";
-    public static final int threadNum = 10;
-    private static final ExecutorService pool = new ThreadPoolExecutor(
-        threadNum,
-        threadNum,
-        0L,
-        TimeUnit.MILLISECONDS,
-        new ArrayBlockingQueue<>(1024),
-        new ThreadPoolExecutor.AbortPolicy());
+  public final ConsumerRecords<String, String> records;
 
-    public static Properties initConfig() {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.CLIENT_ID_CONFIG, "client-demo");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
+  public RecordHandler(ConsumerRecords<String, String> records){
+    this.records = records;
+  }
 
-        return props;
-    }
-
-    public static void main(String[] args) {
-        Properties props = initConfig();
-        KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(props);
-        consumer.subscribe(Arrays.asList(topic));
-        try{
-
-            while (true) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-                if (!records.isEmpty()){
-                    pool.submit(new RecordHandler(records));
-                }
-            }
-        }catch (Exception e){
-            e.printStackTrace();
-        }finally {
-            consumer.close();
-        }
-    }
-
-    public static class RecordHandler extends Thread{
-        public final ConsumerRecords<String, String> records;
-        public RecordHandler(ConsumerRecords<String, String> records){
-            this.records = records;
-        }
-
-        @Override
-        public void run() {
-            // process
-        }
-    }
+  @Override
+  public void run() {
+    // process
+  }
 }
 ```
-
-使用线程池的方式可以使消费者的 IO 线程和处理线程分开，从而不需要维护过多了 TCP 连接，但是由于是线程池处理消息因此不能保证消息的消费顺序，可以使用一个额外的变量保存消息的 offset，在 KafkaConsumer 拉取消息之前先提交 offset，这在一定程度上可以避免消息乱序，但是有可能造成消息丢失(某些线程处理较小 offset 失败而较大 offset 处理成功则较小 offset 消息丢失，可保存处理失败的 offset 之后同一再次处理)；另外一种思路就是采用滑动窗口的思想 KafkaConsumer 每次拉取一些数据保存在缓存中，处理线程处理缓存中的消息直到全部处理成功。
-
+消息采用线程池的方式处理，因此不能保证消息消费的顺序性，另外由于消息处理的速率不同可能会导致在提交消费位移时有些消息尚未消费成功，可以借用窗口的思想，每次提交消费位移时保证小于当前 offset 的消息都已经消费。
 
 ## 脚本工具
 

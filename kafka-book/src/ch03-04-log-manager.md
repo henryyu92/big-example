@@ -171,6 +171,8 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 
 ### Log Compaction
 
+![Log Compaction](img/log-compaction.png)
+
 Log Compaction 清理有重复 key 的消息，只保留最新的消息。开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
 
 Kafka LogMananger 在启动时会启动 LogCleaner，并在启动时创建 numThreads (参数 ```log.cleaner.threads```
