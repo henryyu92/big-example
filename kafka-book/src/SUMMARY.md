@@ -21,7 +21,7 @@
   - [消息](./ch03-01-message.md)
   - [日志](./ch03-02-log-file.md)
   - [索引](./ch03-03-index-file.md)
-  - [LogManager](./ch03-04-log-manager.md)
+  - [日志管理](./ch03-04-log-manager.md)
 - [Broker](./ch04-00-broker.md)
   - [ReplicaManager](./ch04-01-replica-manager.md)
   - [OffsetManager](./ch04-02-offset-manager.md)

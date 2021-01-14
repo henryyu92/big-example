@@ -1,8 +1,43 @@
 # 消息
 
-Kafka 中的消息称为 `Record`，生产者将业务数据组装成 `ProducerRecord` 发往 broker，消费者将消息从 broker 拉去后封装成 `ConsumerRecord` 给下游业务使用。
-
-
+消息是 Kafka 中流通的数据，生产者客户端将业务生成的消息包装成 `ProducerRecord` 发送到集群，Broker 将接收到的消息转换成 `Record` 并以 Log 的形式持久化在磁盘，消费者客户端从集群拉取消息并包装成 `ConsumerRecord` 给下游业务使用。
+```java
+public class DefaultRecord implements Record {
+  
+  // 消息大小
+  private final int sizeInBytes;
+  private final byte attributes;
+  // 消息的 offset
+  private final long offset;
+  // 消息的时间戳(创建时间/追加时间)
+  private final long timestamp;
+  private final int sequence;
+  // 消息的 key
+  private final ByteBuffer key;
+  // 消息的 value
+  private final ByteBuffer value;
+  private final Header[] headers;
+  
+  // ...
+}
+```
+Kafka 将消息以批次(`RecordBatch`)的方式追加到日志，每个 `RecordBatch` 包含了多个
+```
+RecordBatch =>
+ BaseOffset => Int64                        RecordBatch 的起始 offset                
+ Length => Int32
+ PartitionLeaderEpoch => Int32              分区 leader 的版本号或更新次数
+ Magic => Int8                              消息格式版本号
+ CRC => Uint32
+ Attributes => Int16
+ LastOffsetDelta => Int32                   
+ FirstTimestamp => Int64
+ MaxTimestamp => Int64
+ ProducerId => Int64
+ ProducerEpoch => Int16
+ BaseSequence => Int32
+ Records => [Record]
+```
 
 Kafka 消息(Record)是总是以分批(RecordBatch)的形式写入，一个 RecordBatch 包含一个或多个 Record。
 
@@ -44,5 +79,5 @@ Header 的格式如下：
 
 使用 ```kafka-dump-log.sh``` 脚本可以查看日志的格式：
 ```shell
-bin/kafka-dump-log.sh --file /kafka/log/file
+bin/kafka-dump-log.sh --files /kafka/log/file
 ```

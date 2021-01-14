@@ -1,4 +1,9 @@
 # 参数调优
+消费者客户端在初始化的时候可以配置多个参数，合理的配置这些参数可以提供消费者客户端的性能。
+
+|参数名|说明|默认值|
+|:-----:|:-----|:-----:|
+|``
 
 - ```fetch.min.bytes```：设置 KafkaConsumer 在一次拉取请求中能从 Kafka 中拉取的最小数据量，默认为 1B。Kafka 在收到 KafkaConsumer 的拉取请求时如果数据量小于这个值时需要等待直到足够为止，因此如果设置过大则可能导致一定的延时
 - ```fetch.max.bytes```：设置 KafkaConsumer 在一次拉取请求中能从 Kafka 中拉取的最大数据量，默认为 52428800B(50MB)。
@@ -14,4 +19,9 @@
 - ```reconnect.backoff.ms```：配置尝试重新连接指定主机之前的等待时间，避免频繁的连接主机，默认 50ms
 - ```retry.backoff.ms```：配置尝试重新发送失败的请求到指定的主题分区之前等待的时间，避免由于故障而频繁重复发送，默认 100ms
 - ```isolation.level```：配置消费者的事务隔离级别，可以为 "read_uncommiteed"，"read_committed"
-- bootstrap.servers  ""    key.deserializer    消息 key 对应的反序列化类  value.deserializer    消息 value 对应的反序列化类  group.id  ""  消费者所属消费组的位移标识  client.id  ""  消费者 clientId  heartbeat.interval.ms  3000  分组管理时消费者和协调器之间的心跳预计时间，通常不高于 session.timeout.ms 的 1/3  session.timeout.ms  10000  组管理协议中用来检测消费者是否失效的超时时间  max.poll.interval.ms  300000  拉取消息线程最长空闲时间，超过此时间则认为消费者离开，将进行再均衡操作  auto.offset.reset  latest  有效值为 "earliest", "latest", "none"  enable.auto.commit  true  是否开启自动消费位移提交  auto.commit.interval.ms  5000  自动提交消费位移时的时间间隔  partition.assignment.strategy  RangeAssignor  消费者分区分配策略  interceptor.class  ""  消费者客户端拦截器
+- heartbeat.interval.ms  3000  分组管理时消费者和协调器之间的心跳预计时间，通常不高于 session.timeout.ms 的 1/3  
+- session.timeout.ms  10000  组管理协议中用来检测消费者是否失效的超时时间  
+- max.poll.interval.ms  300000  拉取消息线程最长空闲时间，超过此时间则认为消费者离开，将进行再均衡操作  
+- auto.offset.reset  latest  有效值为 "earliest", "latest", "none"  
+- enable.auto.commit  true  是否开启自动消费位移提交  
+- auto.commit.interval.ms  5000  自动提交消费位移时的时间间隔  

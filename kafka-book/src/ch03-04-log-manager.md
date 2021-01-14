@@ -1,5 +1,6 @@
 # LogManager
 
+## 日志刷盘
 
 ## 日志清理
 
@@ -170,8 +171,11 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 ```
 
 ### Log Compaction
+<center>
 
 ![Log Compaction](img/log-compaction.png)
+</center>
+
 
 Log Compaction 清理有重复 key 的消息，只保留最新的消息。开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
 

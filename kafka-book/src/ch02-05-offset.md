@@ -1,12 +1,11 @@
-# 消费位移
+# 位移提交
+
 Kafka 分区的每个消息都有唯一的 offset 表示消息在分区中的位置，消费者在拉取到消息处理完成之后需要向 broker 提交分区下次 poll 的起始消息的 offset，即 poll 拉取的最后一条消息的 offset + 1。Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offsets``` 中，消费者在向 broker 拉取数据时，broker 在 ```__consumer_offsets``` 中获取拉取的起始消息位置。
 
 对于 Kafka 分区而言每个消息都有唯一的 offet 表示消息在分区中的位置；对于消费者而言也有一个 offset 表示消费到的消息所在的位置。消费者每次调用 poll 方法是返回的是还没有被消费的消息集，因此 broker 需要记录上次消费到的 offset，Kafka 将消费的 offset 持久化在内部主题 __consumer_offsets 中。broker 在将数据发送给 Consumer 时先到 __consuemr_offsets 中查看需要发送的消息的起始位置。
 
 消费者在消费完消息之后需要向 broker 提交下次发送数据的 offset，即当前消息集最后一个消息的 offset + 1。
 
-
-## 位移提交
 消费者中有 position 和 committed offset 的概念，分别表示下一次拉取的消息的起始位移和已经提交过的消费位移。KafkaConsumer 提供了 ```position(TopicPartition)``` 和 ```committed(TopicPartition)``` 两个方法获取 position 和 committed offset。
 ```java
 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
