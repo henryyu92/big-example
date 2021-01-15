@@ -1,29 +1,21 @@
 # 位移提交
+Kafka 每个消息都有唯一的 offset 表示消息在分区的位置，消费者在消费完消息后需要向集群提交当前拉取消息批次中最后一个消息的下一个 offset。
 
-Kafka 分区的每个消息都有唯一的 offset 表示消息在分区中的位置，消费者在拉取到消息处理完成之后需要向 broker 提交分区下次 poll 的起始消息的 offset，即 poll 拉取的最后一条消息的 offset + 1。Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offsets``` 中，消费者在向 broker 拉取数据时，broker 在 ```__consumer_offsets``` 中获取拉取的起始消息位置。
-
-对于 Kafka 分区而言每个消息都有唯一的 offet 表示消息在分区中的位置；对于消费者而言也有一个 offset 表示消费到的消息所在的位置。消费者每次调用 poll 方法是返回的是还没有被消费的消息集，因此 broker 需要记录上次消费到的 offset，Kafka 将消费的 offset 持久化在内部主题 __consumer_offsets 中。broker 在将数据发送给 Consumer 时先到 __consuemr_offsets 中查看需要发送的消息的起始位置。
-
-消费者在消费完消息之后需要向 broker 提交下次发送数据的 offset，即当前消息集最后一个消息的 offset + 1。
-
-消费者中有 position 和 committed offset 的概念，分别表示下一次拉取的消息的起始位移和已经提交过的消费位移。KafkaConsumer 提供了 ```position(TopicPartition)``` 和 ```committed(TopicPartition)``` 两个方法获取 position 和 committed offset。
+`KafkaConsumer` 提供了 `committed(partition)` 方法和 `position(partiton)` 方法分别用来获取已经提交的 offset 和下一次拉取消息的起始 offset。
 ```java
-ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-Set<TopicPartition> partitions = records.partitions();
-for (TopicPartition partition : partitions){
-  consumer.position(partition);
-  consumer.committed(partition);
-  // 同步提交
-  consumer.commitSync();
-  // 下一次拉取的 offset
-  consumer.position(partition);
-  // 已经提交的 offset
-  consumer.committed(partition);
-}
+// 获取指定分区已经提交的 offset 信息
+public OffsetAndMetadata committed(TopicPartition partition)
+
+// 获取下一次拉取消息的起始 offset
+public long position(TopicPartition partition)
 ```
+通过返回的分区的 offset 信息，可以手动的控制消费者客户端消息的拉取以及 offset 的提交。`KafkaConsumer` 默认是自动提交 offset
+
 Kafka 默认的消费位移提交方式是自动提交，即 ```enable.auto.commit``` 配置默认为 true，默认提交是每隔一个周期自动提交，这个周期是由 ```auto.commit.interval.ms``` 配置，默认时间间隔为 5s。自动提交的动作是在 poll 方法中完成的，默认方式下消费者每隔 5s 拉取到每个分区中最大的消费位移，在每次真正向服务器端发起拉取请求之前会检查是否可以进行位移提交，如果可以则提交上次轮询的位移。
 
 Kafka 提供了手动提交位移，这样可以使得对消费位移的管理控制更加灵活，使用手动位移提交需要关闭自动提交即 ```enable.auto.commit``` 设置为 false，然后使用 ```KafkaConsumer#commitSync()``` 同步提交或者使用 ```KafkaConsumer#commitAsync()``` 异步提交。
+
+## 同步提交
 ```java
 final int batchSize = 200;
 List<ConsumerRecord> buffer = new ArrayList<>();
@@ -68,6 +60,7 @@ while (isRunning){
   }
 }
 ```
+## 异步提交
 异步提交(commitAsync)的方式在提交时不会阻塞消费者线程，可能在提交消费位移结果返回之前开始了新一次的拉取操作。KafkaConsumer 提供了三个重载方法用于异步提交：
 ```java
 public void commitAsync()
@@ -100,7 +93,7 @@ try{
   }
 }
 ```
-### 指定位移消费
+## 指定位移
 
 Kafka 中当消费者查找不到所记录的消费位移或者位移越界时，就会根据消费者客户端参数 ```auto.offset.reset``` 的配置决定消费消息的起始位置，默认是 "latest" 表示从分区末尾开始消费，如果设置为 "earliest" 则表示从头(也就是 0)开始消费，如果设置为 "none" 则表示在获取不到消费位移时抛出 NoOffsetForPartitionException 异常。
 
