@@ -15,7 +15,7 @@
 |:-----:|:-----|:-----:|
 |`enable.auto.commit`| 是否开启自动提交 offset | true|
 |`auto.commit.interval.ms`|自动提交 offset 的时间间隔|5000|
-|`auto.offset.reset`|无法获取 offset 时的消费起始位置，可以设置三种方式：<li>`earliest` 表示从</li>| latest|
+|`auto.offset.reset`|无法获取 offset 时的消费起始位置，可以设置三种方式：<li>`earliest` 表示从</li><li>`latest`</li><li>`none`</li>| latest|
 
 
 
@@ -32,4 +32,3 @@
 - heartbeat.interval.ms  3000  分组管理时消费者和协调器之间的心跳预计时间，通常不高于 session.timeout.ms 的 1/3  
 - session.timeout.ms  10000  组管理协议中用来检测消费者是否失效的超时时间  
 - max.poll.interval.ms  300000  拉取消息线程最长空闲时间，超过此时间则认为消费者离开，将进行再均衡操作  
-- auto.offset.reset  latest  有效值为 "earliest", "latest", "none"  

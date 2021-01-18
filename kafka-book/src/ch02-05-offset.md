@@ -1,7 +1,7 @@
 # 位移提交
-Kafka 每个消息都有唯一的 offset 表示消息在分区的位置，消费者在消费完消息后需要向集群提交当前拉取消息批次中最后一个消息的下一个 offset。
+Kafka 每个消息都有唯一的 offset 表示消息在分区的位置，消费者需要向集群提交 offset 以便在发生再均衡时消费者能够从正常的 offset 开始消费。
 
-`KafkaConsumer` 提供了 `committed(partition)` 方法和 `position(partiton)` 方法分别用来获取已经提交的 offset 和下一次拉取消息的起始 offset。
+`KafkaConsumer` 提供了 `committed(partition)` 方法和 `position(partiton)` 方法分别用来获取已经提交的 offset 和下一次拉取消息的起始 offset，通过返回的分区的 offset 信息，可以手动的控制消费者客户端消息的拉取以及 offset 的提交。
 ```java
 // 获取指定分区已经提交的 offset 信息
 public OffsetAndMetadata committed(TopicPartition partition)
@@ -9,13 +9,12 @@ public OffsetAndMetadata committed(TopicPartition partition)
 // 获取下一次拉取消息的起始 offset
 public long position(TopicPartition partition)
 ```
-通过返回的分区的 offset 信息，可以手动的控制消费者客户端消息的拉取以及 offset 的提交。`KafkaConsumer` 默认是自动提交 offset
+`KafkaConsumer` 默认是自动提交 offset，即参数 `enable.auto.commit` 设置为 true，默认情况下消费者客户端每隔固定周期计算当前每个分区已经拉取的最大消息 offset 并在下次拉取消息时提交，间隔时间由参数 `auto.commit.interval.ms` 配置，默认 5s。
 
-Kafka 默认的消费位移提交方式是自动提交，即 ```enable.auto.commit``` 配置默认为 true，默认提交是每隔一个周期自动提交，这个周期是由 ```auto.commit.interval.ms``` 配置，默认时间间隔为 5s。自动提交的动作是在 poll 方法中完成的，默认方式下消费者每隔 5s 拉取到每个分区中最大的消费位移，在每次真正向服务器端发起拉取请求之前会检查是否可以进行位移提交，如果可以则提交上次轮询的位移。
-
-Kafka 提供了手动提交位移，这样可以使得对消费位移的管理控制更加灵活，使用手动位移提交需要关闭自动提交即 ```enable.auto.commit``` 设置为 false，然后使用 ```KafkaConsumer#commitSync()``` 同步提交或者使用 ```KafkaConsumer#commitAsync()``` 异步提交。
+Kafka 提供了手动提交位移，使用手动位移提交需要关闭自动提交即 `enable.auto.commit=false`，然后使用 `KafkaConsumer#commitSync()` 同步提交或者使用 `KafkaConsumer#commitAsync()` 异步提交。
 
 ## 同步提交
+同步提交方式会阻塞线程直到 offset 提交完成，
 ```java
 final int batchSize = 200;
 List<ConsumerRecord> buffer = new ArrayList<>();
