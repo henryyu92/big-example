@@ -1,5 +1,5 @@
 # 位移提交
-Kafka 每个消息都有唯一的 offset 表示消息在分区的位置，消费者需要向集群提交 offset 以便在发生再均衡时消费者能够从正常的 offset 开始消费。
+Kafka 中每个消息都有唯一的 offset 表示消息在分区的位置，消费者通过 poll 方法拉取消息后需要向集群提交 offset 用于持久化，以便在发生再均衡时消费者能够从正常的 offset 开始消费。
 
 `KafkaConsumer` 提供了 `committed(partition)` 方法和 `position(partiton)` 方法分别用来获取已经提交的 offset 和下一次拉取消息的起始 offset，通过返回的分区的 offset 信息，可以手动的控制消费者客户端消息的拉取以及 offset 的提交。
 ```java

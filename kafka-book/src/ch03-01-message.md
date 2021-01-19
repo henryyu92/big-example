@@ -21,14 +21,14 @@ public class DefaultRecord implements Record {
   // ...
 }
 ```
-Kafka 将消息以批次(`RecordBatch`)的方式追加到日志，每个 `RecordBatch` 包含了多个
+Kafka 将消息以`RecordBatch`形式追加到日志，每个 `RecordBatch` 包含了多个 `Record`，此外还包含了每个 `RecordBatch` 的信息。
 ```
 RecordBatch =>
  BaseOffset => Int64                        RecordBatch 的起始 offset                
  Length => Int32
  PartitionLeaderEpoch => Int32              分区 leader 的版本号或更新次数
  Magic => Int8                              消息格式版本号
- CRC => Uint32
+ CRC => Uint32                              从 Attributes 开始的所有数据的校验和
  Attributes => Int16
  LastOffsetDelta => Int32                   
  FirstTimestamp => Int64
