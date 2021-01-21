@@ -1,15 +1,10 @@
-# 协调器
-当消费者配置了不同的分区策略，多个消费者之间的分区分配需要通过消费者协调器(ConsumerCoordinator) 和组协调器(GroupCoordinator) 来完成。
+# 消费者协调器
 
-Kafka 旧版本客户端使用 ZooKeeper 监听完成消费者分区分配之间的协调工作。每个消费组在 ZK 上维护了 /consumer/<group> 路径，其下有三个子路径：
-- ids：使用临时节点存储消费组中的消费者信息，临时节点路径名为 consumer.id_主机名-时间戳-UUID 
-- owners：记录分区和消费者的对应关系
-- offsets：记录消费组中消息的 offset
+消费者协调器负责和组管理器交互以完成 offset 的管理以及分区的管理。消费者协调器在 `KafkaConsumer` 创建的时候初始化
 
-每个 broker、topic 和 partition 在 ZK 上
+## 分区分配
 
-
-### 再均衡
+## 再均衡
 
 再均衡是指分区的所属权从一个消费者转移到另一个消费者的行为，它为消费组具备高可用性和伸缩性提供保障，使得可以方便安全的删除或添加消费组中的消费者。
 
@@ -83,3 +78,6 @@ GroupCoordinator 对 SyncGroupRequest 做合法校验之后将 leader 消费者�
 参数 ```max.poll.interval.ms``` 用于指定 poll 方法调用之间的最大延时，也就是消费者在获取更多消息之前可以空闲的时间最大值，如果超过此时间上限没有 poll 方法调用则任务消费者失败触发再均衡。
 
 除了被动退出消费组，还可以向 GroupCoordinator 发送 LeaveGroupRequest 请求主动退出消费组，如在消费者客户端调用 unsubscribe 方法。
+
+
+## 提交 offset

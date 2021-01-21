@@ -1,11 +1,33 @@
 # 消息
 
-消息是 Kafka 中流通的数据，生产者客户端将业务生成的消息包装成 `ProducerRecord` 发送到集群，Broker 将接收到的消息转换成 `Record` 并以 Log 的形式持久化在磁盘，消费者客户端从集群拉取消息并包装成 `ConsumerRecord` 给下游业务使用。
+消息是 Kafka 中流通的数据，生产者客户端将业务生成的消息包装成 `ProducerRecord` 后转换成特定的格式发送到集群，集群接收到消息后追加到 Log 并持久化到磁盘，消费者客户端从集群拉取到消息数据后转换成 `ConsumerRecord` 给下游业务使用。
+
 
 ## 消息格式
 
+`Record` 定义了消息的格式，生产者客户端的消息 `ProducerRecord` 在追加到 `RecordAccumulator` 时会调用 `DefaultRecord#writeTo` 方法将消息按照 `Record` 定义的格式写入到 ByteBuffer。
+```
+Record =>
+  Length => Varint                          消息的长度
+  Attributes => Int8                        消息属性，暂时未使用
+  TimestampDelta => Varlong                 与 RecordBatch 的起始时间戳的差值
+  OffsetDelta => Varint                     与 RecordBatch 起始位移的差值
+  KeyLength => Varint                       Key 的长度，-1 表示没有 key
+  Key => Bytes                              消息的 key
+  ValueLength => Varint                     Value 的长度，-1 表示没有 value
+  Value => Bytes                            消息的值
+  Headers => [HeaderKey HeaderValue]
+    HeaderKey => String
+    HeaderValue => Bytes
 
-消息以`RecordBatch`形式追加到日志，每个 `RecordBatch` 包含了多个 `Record`，此外还包含了每个 `RecordBatch` 的信息。
+Header =>
+  headerKeyLength: varint
+  headerKey: String
+  headerValueLength: varint
+  Value: byte[]
+```
+
+Kafka  中消息是以批的方式传输，`RecordBatch` 定义了消息批量传输以及持久化的格式，每个 `RecordBatch` 包含了多个 `Record`，此外还包含了每个 `RecordBatch` 的信息。
 ```
 RecordBatch =>
   BaseOffset => Int64                        RecordBatch 的起始 offset                
@@ -34,6 +56,7 @@ RecordBatch =>
 ```
 
 
+
 如果 attributes 字段是控制批次(Control Batch)，则 RecordBatch 只包含一个称为 ControlRecord 的记录，ControlRecord 不会传到应用而是用于消费者过滤被 abort 的事务消息。ControlRecord 的格式如下：
 - version：占用 2 个字节，默认是 0
 - type：占用 2 个字节，0 表示 abort，1 表示 commit
@@ -43,26 +66,7 @@ ControlBatch =>
   type: int16 (0 indicates an abort marker, 1 indicates a commit)
 ```
 
-```
-Record =>
-  Length => Varint                          消息的长度
-  Attributes => Int8                        消息属性，暂时未使用
-  TimestampDelta => Varlong                 与 RecordBatch 的起始时间戳的差值
-  OffsetDelta => Varint                     与 RecordBatch 起始位移的差值
-  KeyLength => Varint                       Key 的长度，-1 表示没有 key
-  Key => Bytes                              消息的 key
-  ValueLength => Varint                     Value 的长度，-1 表示没有 value
-  Value => Bytes                            消息的值
-  Headers => [HeaderKey HeaderValue]
-    HeaderKey => String
-    HeaderValue => Bytes
 
-Header =>
-  headerKeyLength: varint
-  headerKey: String
-  headerValueLength: varint
-  Value: byte[]
-```
 
 
 ## 消息转换
@@ -71,13 +75,13 @@ ProducerRecord
 
 ProducerBatch
 
-MemoryRecords
-
-消息在内存中的形式，
+DefaultRecordBatch
 
 DefaultRecord
 
-DefaultRecordBatch
+MemoryRecords
+
+消息在内存中的形式，
 
 ConsumerRecords
 

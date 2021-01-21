@@ -1,20 +1,18 @@
 package client.consumer;
 
-import com.fasterxml.jackson.databind.deser.std.StringDeserializer;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Properties;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Properties;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 public class KafkaConsumerTest {
 
-    private static String broker = "localhost:9092";
-    private static String topic = "topic-demo";
+    private static String broker = "localhost:19092";
+    private static String topic = "topic-hello";
     private static String group = "group-demo";
     private static volatile boolean isRunning = true;
 
