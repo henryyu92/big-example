@@ -9,12 +9,11 @@ broker 上的日志文件以及索引文件都是以基准偏移量(base offset)
 
 ## Log
 
+Log 是消息追加并持久化的容器，消息追加后
+
 Log 是 kafka 日志的抽象，生产者向 broker 发送的消息是以 Log 的形式存储到文件中。Log 是一个 LogSegment 序列，每个 LogSegment 都有一个基准偏移量(base offset) 表示当前 LogSegment 中第一条消息的 offset。
 
 Kafka 中消息不是一条一条的追加到日志文件中，而是以 ```RecordBatch``` 为单元追加的。消息在日志文件中是以二进制的形式存储的，
-
-
-日志刷写
 
 <center>
 
