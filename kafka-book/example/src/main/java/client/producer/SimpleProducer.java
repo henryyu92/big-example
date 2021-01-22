@@ -9,7 +9,7 @@ import java.util.Properties;
 
 public class SimpleProducer {
 
-    public static final String brokerList = "localhost:9092";
+    public static final String brokerList = "localhost:19092";
     public static final String topic = "topic-demo";
 
     // 初始化生产者参数
@@ -28,12 +28,14 @@ public class SimpleProducer {
         // 创建消息
         ProducerRecord<String, String> record = new ProducerRecord<>(topic, "hello kafka");
         try{
-            // 发送消息
-            producer.send(record);
+            for(int i = 0; i < 10; i++){
+                // 发送消息
+                producer.send(record);
+            }
 
-            producer.send(record, (metadata, exception) -> {
-
-            });
+//            producer.send(record, (metadata, exception) -> {
+//
+//            });
         }catch(Exception e){
             e.printStackTrace();
         }

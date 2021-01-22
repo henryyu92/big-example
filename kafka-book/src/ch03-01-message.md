@@ -30,7 +30,7 @@ Header =>
 Kafka  中消息是以批的方式传输，`RecordBatch` 定义了消息批量传输以及持久化的格式，每个 `RecordBatch` 包含了多个 `Record`，此外还包含了每个 `RecordBatch` 的信息。
 ```
 RecordBatch =>
-  BaseOffset => Int64                        RecordBatch 的起始 offset                
+  BaseOffset => Int64                        RecordBatch 的起始 offset，在追加到 Log 的时候确定
   Length => Int32                            计算从 partitionLeaderEpoch 开始到末尾的长度
   PartitionLeaderEpoch => Int32              分区 leader 的版本号或更新次数
   Magic => Int8                              消息格式版本号
@@ -46,15 +46,16 @@ RecordBatch =>
     bit 4               事务消息：0 表示非事务消息
     bit 5               是否是 control batch：0 表示不是
     bit 6-15            未使用
-  LastOffsetDelta => Int32                   RecordBatch 中最后一个 Record 的 offset 与 baseOffset 的差值
+  LastOffsetDelta => Int32                   最后一个 Record 相对于 baseOffset 的值，即 
   FirstTimestamp => Int64                    RecordBatch 中第一条 Record 的时间戳
   MaxTimestamp => Int64                      RecordBatch 中最大的时间戳，一般情况下是最后一个 Record 的时间戳
   ProducerId => Int64
   ProducerEpoch => Int16                     用于支持幂等和事务
   BaseSequence => Int32                      用于支持幂等和事务
+  NumRecords => Int32                       Record 的数量
   Records => [Record]
 ```
-
+BaseOffset 在客户端发送的消息中为 0，批次中每增加一个 Record 则 Record 的 OffsetDelta + 1。
 
 
 如果 attributes 字段是控制批次(Control Batch)，则 RecordBatch 只包含一个称为 ControlRecord 的记录，ControlRecord 不会传到应用而是用于消费者过滤被 abort 的事务消息。ControlRecord 的格式如下：
@@ -86,6 +87,16 @@ MemoryRecords
 ConsumerRecords
 
 ConsumerRecord
+
+
+// 消息转换成 DefaultRecord
+
+Accumulator#tryAppend()  --> ProducerBatch  --> MemoryRecordsBuilder  --> DefaultRecord#writeTo()
+
+// 批量消息转换成 RecordBatch
+
+Send#sendProduceRequest --> MemoryRecordsBuilder#build() ---> MemoryRecordsBuilder#close   -> MemoryRecordsBuilder#writeDefaultBatchHeader  ---> RecordBatch#writeHeader
+
 
 使用 ```kafka-dump-log.sh``` 脚本可以查看日志的格式：
 ```shell
