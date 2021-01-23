@@ -10,7 +10,7 @@ import java.util.Properties;
 public class SimpleProducer {
 
     public static final String brokerList = "localhost:19092";
-    public static final String topic = "topic-demo";
+    public static final String topic = "topic-demo-1";
 
     // 初始化生产者参数
     public static Properties initConfig(){

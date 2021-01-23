@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HelloWorldConsumer {
 
-    private static final String BROKER = System.getProperty("broker", "localhost:19092");
+    private static final String BROKER = System.getProperty("broker", "127.0.0.1:19092");
 
     public static void main(String[] args) throws InterruptedException {
 
@@ -29,15 +29,13 @@ public class HelloWorldConsumer {
 
         KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(config);
 
-        consumer.subscribe(Collections.singletonList("topic-hello"));
+        consumer.subscribe(Collections.singletonList("topic-demo-1"));
         // 三种订阅模式混合使用会抛出 IllegalStateException
         // consumer.subscribe(Pattern.compile("[a-zA-Z-]*hello"));
 
         while (true){
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(10));
             for (ConsumerRecord<String, String> record : records){
-
-                TimeUnit.MINUTES.sleep(1);
 
                 System.out.println(record);
             }
