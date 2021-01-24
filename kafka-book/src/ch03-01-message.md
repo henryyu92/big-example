@@ -6,20 +6,27 @@
 ## 消息格式
 
 消息在 Kafka 中是以批量的方式传输，`RecordBatch` 定义了消息批量传输的格式，每个 `RecordBatch` 由定长的头信息和变长的 `Record` 信息组成。
+
+<center>
+
+![Log](img/records.png)
+</center>
+
+
 ```
 RecordBatch =>
-  BaseOffset => Int64                 RecordBatch 的基准偏移
+  BaseOffset => Int64                 RecordBatch 的基准偏移，追加到日志时确定
   Length => Int32                     从 PartitionLeaderEpoch 开始的字节长度
-  PartitionLeaderEpoch => Int32       leader 的选举次数
+  PartitionLeaderEpoch => Int32       leader 的选举次数，追加到日志时确定
   Magic => Int8                       消息格式版本号
   CRC => Uint32                       从 Attributes 开始的所有数据的校验和
   Attributes => Int16                 RecordBatch 的属性
   LastOffsetDelta => Int32            最后一个 Record 相对 BaseOffset 的差值
   FirstTimestamp => Int64             第一个 Record 的时间戳
   MaxTimestamp => Int64               RecordBatch 中最大的时间戳
-  ProducerId => Int64
-  ProducerEpoch => Int16              用于支持幂等和事务
-  BaseSequence => Int32               用于支持幂等和事务
+  ProducerId => Int64                 生产者 Id，默认 -1
+  ProducerEpoch => Int16              用于支持幂等和事务，默认 -1
+  BaseSequence => Int32               用于支持幂等和事务，默认 -1
   NumRecords => Int32                 Record 的数量
   Records => [Record]
 
@@ -35,7 +42,7 @@ Attribute =>
     bit 5               是否是 ControlBatch：0 表示不是
     bit 6-15            未使用
 ```
-如果是 ControlBatch 则 RecordBatch 只包含一个称为 ControlRecord 的记录，ControlRecord 不会传到应用而是用于消费者过滤被 abort 的事务消息。
+如果 RecordBatch 的 Attribute 表示为 ControlBatch 则整个批次只包含一个称为 ControlRecord 的记录，ControlRecord 不会传到应用而是用于消费者过滤被 abort 的事务消息。
 ```
 ControlBatch =>
   version: int16        0
@@ -63,7 +70,6 @@ Header =>
   headerValueLength: varint
   Value: byte[]
 ```
-
 
 ## 消息转换
 

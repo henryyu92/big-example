@@ -1,59 +1,56 @@
 # 主题管理
-主题管理包括创建、查看、修改、删除主题等操作，Kafka 的主题操作通过 ```$KAFKA_HOME/binkafka-topics.sh``` 脚本执行，其本质是调用 ```kafka.admin.TopicCommand``` 类来执行主题的管理操作。
-### 创建主题
-如果 broker 配置参数 ```auto.create.topics.enable``` 设置为 true(默认)，那么当生产者向一个尚未创建的主题发送消息时会自动创建一个分区数为 ```num.partitions``` (默认为 1)、副本因子为 ```default.replication.facotr``` (默认为 1) 的主题，另外当消费者开始从未知主题中读取消息时或者任意一个客户端向未知主题发送元数据请求时都会按照配置参数的值创建一个相应的主题。不建议将 ```auto.create.topics.enable``` 设置为 true，因为这会增加主题管理与维护的难度。
 
-使用 ```kafka-topics.sh``` 脚本来创建主题是更通用的方式：
-```shell
+Kafka 提供了对集群中主题的管理，通过 `$KAFKA_HOME/bin/kafka-topics.sh` 脚本工具可以进行主题的创建、查看、修改、删除等操作。
+
+## 创建主题
+
+集群的配置参数 `auto.create.topics.enable` 默认为 true，也就是说生产者向不存在的主题发送消息或者消费者从不存在的主题拉取消息都会自动的创建对应的主题，为了避免创建未知的主题，通常会将参数设置为 false 禁止自动创建主题，而是通过脚本工具创建主题。
+```shell script
 # --create 表示创建主题
 # --bootstrap-server 指定 broker 的地址
 # --topic 指定创建的主题名称
-# --partitions 指定主题的分区数
-# --replication-facotr 指定分区的副本因子，副本的数量不能多于 broker 的数量
+# --partitions 指定主题的分区数，默认为 1
+# --replication-factor 指定分区的副本因子，副本的数量不能多于 broker 的数量，默认为 1
 
 bin/kafka-topics.sh \
 --create \
 --bootstrap-server localhost:9092 \
 --topic topic-create \
 --partitions 4 \
---replication-factor 2 \
+--replication-factor 2
 ```
-执行完脚本之后，Kafka 会在broker 节点的 log.dir 或 log.dirs 参数所配置的目录(默认 /tmp/kafka-logs/)下创建相应的主题分区目录，目录名为 ```<topic>-<partitionNum>```。当创建一个主题时会在 ZooKeeper 的 /brokers/topics/ 目录下建立一个和主题同名的 ZNode，该节点记录了主题的分区副本和 broker 对应的分配方案。
+执行创建主题命令后 Kafka 会自动创建主题以及对应的分区和副本，并分配到不同的 Broker 上，集群配置参数 `log.dir` 指定的目录下创建 `<topic-partition>` 的目录，并在 ZooKeeper 的 `brokers/topics` 目录下创建创建和主题同名的 ZNode，该节点记录了主题的分区副本和 broker 对应的分配方案。
 ```shell
 get /brokers/topics/topic-create
 
 # "2":[1,2] 表示分区号为 2 的副本分布在 brokerId 为 1 和 2 的 broker 上
+
 {"version":"1", "partitions":{"2":[1,2], "1":[0,1],"3":[2,1],"0":[2,0]}}
 ```
-通过 ```kafka-topics.sh``` 脚本的 describe 指令可以查看分区副本的分配细节：
-```shell
-bin/kafka-topics.sh \
---zookeeper localhost:2181 \
---describe \
---topic topic-create \
-
-# Topic 表示创建的主题，PartitionCount 表示分区数，RepilicationFactor 表示副本数，Configs 表示主题配置
-Topic:topic-create	PartitionCount:4	RepilicationFactor:2	Configs:
-# Topic 表示创建的主题
-# Partition 表示分区 id
-# Leader 表示 leader 副本对应的 brokerId
-# Replicas 表示分区所有副本对应的 brokerId
-# Isr 表示分区副本的 ISR 集合对应的 brokerId
-Topic:topic-create	Partition: 0	Leader: 2	Replicas: 2,0	Isr: 2,0
-Topic:topic-create  Partition: 1	Leader: 0	Replicas: 0,1	Isr: 0,1
-```
-```kafka-topics.sh``` 脚本还提供了一个 replica-assignment 参数来手动指定分区副本的分配方案，分区从小到大排列，分区与分区之间使用逗号(,)隔开，分区内的副本用冒号(:)隔开，同一个分区的副本不能有重复，分区之间的副本数必须相同：
-```shell
-# 分区分配方案为：
-# 0 分区副本对应的 brokerId 为 2,0；
-# 1 分区副本对应的 brokerId 为 0,1；
-# 2 分区部分对应的 brokerId 为 1,2；
+创建主题的时候还可以指定分区副本的分配，使用 `--replica-assignment` 选项指定具体的副本分配方案。
+```shell script
+# 0 分区副本对应的 brokerId 为 2,0
+# 1 分区副本对应的 brokerId 为 0,1
+# 2 分区部分对应的 brokerId 为 1,2
 # 3 分区副本对应的 brokerId 为 2,1
-bin/kafka-topics.sh --zookeeper localhost:2181 \
+
+bin/kafka-topics.sh \
 --create \
---topic topic-create-same \
+--bootstrap-server localhost:2181 \
+--topic topic-create-replica-assignment \
 --replica-assignment 2:0,0:1,1:2,2:1
 ```
+Kafka 不允许创建同名的主题，在创建主题时使用 `--if-not-exists` 选项可以使得在存在同名的主题时不会做任何处理。
+```shell script
+bin/kafka-topics.sh \
+--create \
+--if-not-exists \
+--bootstrap-server localhost:2181 \
+--topic topic-create-not-exists \
+--partitions 4 \
+--replication-factor 2
+```
+
 创建主题的时候还可以使用 config 参数可以设置要创建的主题的相关参数，可以覆盖原本的默认值：
 ```shell
 bin/kafka-topics.sh \
@@ -65,16 +62,7 @@ bin/kafka-topics.sh \
 --config cleanup.policy=compact \
 --config max.message.bytes=10000
 ```
-Kafka 不允许创建同名的主题，```kafka-topics.sh``` 提供了 if-not-exists 参数在主题名发生冲突时不做任何处理来避免在创建主题时由于主题名冲突而抛出异常：
-```shell
-bin/kafka-topics.sh \
---zookeeper localhost:2181 \
---create \
---topic topic-create \
---partitions 4 \
---replication-factor 2 \
---if-not-exists
-```
+
 创建一个主题时无论是通过 ```kafka-topics.sh``` 还是通过其他方式本质上是在 ZooKeeper 中的 /brokers/topics 节点下创建与主题对应的子节点并写入分区副本分配方案，并且在 /config/topics/ 节点下创建与该主题对应的子节点并写入相关的配置信息，因此可以直接使用 ZooKeeper 的客户端在 /broker/topics 节点下创建主节点并写入副本分配方案，这样可以绕过 ```kafka-topics.sh``` 创建主题时的一些限制：
 ```shell
 # 创建主题及其分区分配方案
@@ -100,7 +88,25 @@ bin/kafka-topics.sh --zookeeper localhost:2181 --describe --under-replicated-par
 
 bin/kafka-topics.sh --zookeeper localhost:2181 --describe --unavailable-partitions
 ```
-#### 修改主题
+
+通过 ```kafka-topics.sh``` 脚本的 describe 指令可以查看分区副本的分配细节：
+```shell
+bin/kafka-topics.sh \
+--zookeeper localhost:2181 \
+--describe \
+--topic topic-create \
+
+# Topic 表示创建的主题，PartitionCount 表示分区数，RepilicationFactor 表示副本数，Configs 表示主题配置
+Topic:topic-create	PartitionCount:4	RepilicationFactor:2	Configs:
+# Topic 表示创建的主题
+# Partition 表示分区 id
+# Leader 表示 leader 副本对应的 brokerId
+# Replicas 表示分区所有副本对应的 brokerId
+# Isr 表示分区副本的 ISR 集合对应的 brokerId
+Topic:topic-create	Partition: 0	Leader: 2	Replicas: 2,0	Isr: 2,0
+Topic:topic-create  Partition: 1	Leader: 0	Replicas: 0,1	Isr: 0,1
+```
+### 修改主题
 ```kafka-topics.sh``` 脚本的 alter 指令可以修改已经创建的主题，Kafka 只支持增加分区而不支持减少分区。当修改一个不存在的 topic 时，使用 --if-exists 参数来忽略修改：
 ```shell
 bin/kafka-topics --zookeeper localhost:2181 \
@@ -111,7 +117,7 @@ bin/kafka-topics --zookeeper localhost:2181 \
 --partitions 3
 ```
 主题的修改特别是分区的修改会使得原有的数据受到很大的影响，如 producer 端根据 key 计算分区，消息的有序性、事务等变得很难保证，因此一般不建议修改分区。
-#### 删除主题
+### 删除主题
 ```kafka-topics.sh``` 脚本的 delete 指令可以用于删除主题，必须配置 ```delete.topic.enable``` 参数为 true 才能删除 topic，不能删除 Kafak 内部主题和不存在的主题：
 ```shell
 bin/kafka-topics --zookeeper localhost:2181 --delete --topic topic-delete
