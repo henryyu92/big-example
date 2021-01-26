@@ -1,10 +1,6 @@
 # 分区管理
-Kafka 以分区作为物理存储单位，每个主题 (Topic) 有一个或多个分区 (Partition)，Producer 发往 broker 的消息根据消息的 key 被分配到指定的分区之后被持久化到分区对应的节点上。
 
-Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
-
-### 分区管理
-#### 修改副本因子
+## 修改副本因子
 修改副本因子的功能是通过重分配所使用的 ```kafka-reassign-partitions.sh``` 来实现的，只需要在 JSON 文件中增加或减少 replicas 的参数即可：
 ```shell
 {
@@ -18,7 +14,7 @@ bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 --execute --reassignment-json-file add.json
 ```
 
-#### 分区重分配
+## 分区重分配
 当集群中的一个节点宕机时，该节点上的分区副本都会失效，Kafka 不会将这些失效的分区副本自动的转移到集群中的其他节点；当新增节点时，只有新创建的主题才能分配到该节点而之前的主题不会自动转移到该节点。
 
 为了保证分区及副本再次进行合理的分配，Kafka 提供了 ```kafka-reassign-partitions.sh``` 脚本来执行分区重新分配的工作，它可以在集群扩容、broker 节点失效的场景下对分区进行迁移。
@@ -47,7 +43,8 @@ bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 --verify --reassignment-json-file project.json
 ```
 分区重分配对集群的性能有很大影响，在实际操作中可以降低重分配的粒度，分批次来执行重分配以减少带来的影响。如果要将某个 broker 下线那么在执行分区重分配操作之前最好关闭或重启 broker，这样这个 broker 就不包含 leader 副本可以提升重分配的性能，减少对集群的影响。
-#### 复制限流
+
+## 复制限流
 分区重分配的本质在于数据复制，当重分配的量比较大则会影响集群的性能因此需要对副本间的复制流量进行限制来保证重分配期间整个服务不会受太大影响。
 
 副本间的复制限流有两种实现方式：```kafka-configs.sh``` 脚本和 ```kafka-reassign-partitions.sh``` 脚本：
@@ -80,7 +77,7 @@ bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 --throttle 10
 ```
 
-#### 带限流的分区重新分配
+### 带限流的分区重新分配
 在分区重分配的时候，可以设置限流以避免数据复制导致负载太大。在执行分区重分配前还是需要生成重分配的候选策略：
 ```shell
 # 创建包含可行性方案的 project.json
