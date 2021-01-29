@@ -1,3 +1,5 @@
+# Region 合并
+
 ## Compaction
 HFile 小文件如果数量太多会导致读取效率低，为了提高读取效率，LSM 树体系架构设计了 Compaction，Compaction 的核心功能是将小文件合并成大文件，提高读取效率。
 

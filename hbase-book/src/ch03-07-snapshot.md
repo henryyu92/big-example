@@ -1,3 +1,5 @@
+# 快照
+
 ## Snapshot
 
 Snapshot 是 HBase 的一个核心功能，使用在线 Snapshot 备份可以实现增量备份和数据迁移。HBase 提供了 4 个在线 Snapshot 备份与恢复的工具：

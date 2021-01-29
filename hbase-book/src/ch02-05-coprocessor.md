@@ -1,3 +1,6 @@
+# Coprocessor
+
+
 ## Coprocessor
 
 HBase 使用 Coprocessor 机制使用户可以将自己编写的程序运行在 RegionServer 上，从而在特定场景下大幅提升执行效率。在某些场景下需要把数据全部扫描出来在客户端进行计算，就会有如下问题：

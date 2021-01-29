@@ -1,3 +1,6 @@
+# 故障转移
+
+
 ## 故障转移
 
 HBase 系统中主要有两类服务进程：Master 进程和 RegionServer 进程。Master 主要负责集群管理调度，发生故障的概率比较低，RegionServer 负责用户的读写，压力会比较大，逻辑比较复杂，因此发生故障的概率较大。RegionServer 有一些常见的异常：

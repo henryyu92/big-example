@@ -1,3 +1,5 @@
+# Region
+
 ## Region
 
 一个 Region 由一个或多个 Store 组成，Store 的个数取决于表中列簇(column family)的个数，每一个列簇对应一个 Store。在 HBase 中每个列簇的数据都集中存放在一起形成一个存储单元 Store，因此建议将具有相同 IO 特性的数据设置在同一个列簇中。

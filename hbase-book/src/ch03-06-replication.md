@@ -1,3 +1,5 @@
+# 复制
+
 ## 复制
 复制功能为 HBase 跨集群数据同步提供了支撑。HBase 客户端创建一个 Peer（一条主集群到备份集群的复制链路），包含 PeerId, 备份集群的 ZK 地址、是否开启数据同步，以及需要同步的 namespace, table, column family 等，HBase 客户端创建 Peer 的流程如下：
 - 将创建 Peer 的请求发送到 Master
