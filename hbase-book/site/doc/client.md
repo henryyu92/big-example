@@ -5,12 +5,10 @@ HBase 客户端获取数据前需要定位到数据对应 Region 所在的 Regio
 HBase 客户端使用 Java 开发，通过 ThriftServer 可以支持其他语言，除此之外 HBase 还提供了交互式的 Shell 客户端，其本质是使用 JRuby 脚本调用 Java 客户端实现。
 
 ### Shell
-
 ```sh
-
+# 启动 HBase Shell
+./hbase shell
 ```
-
-
 
 ### API
 

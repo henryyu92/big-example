@@ -1,7 +1,7 @@
 
 ## 存储
 
-* [HBase](big-hbase/site)
+* [HBase](hbase-book/site)
 
 * [ElasticSearch](big-elasticsearch/site)
 

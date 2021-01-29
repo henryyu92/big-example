@@ -1,7 +1,7 @@
 ### 架构
 
 HBase 借鉴了 BigTable 论文，是典型的 Master-Slave 模型。Master 节点负责管理集群，RegionServer 节点负责处理读写请求。HBase 的数据最终存储在 HDFS 上，并且使用 ZooKeeper 用于协助 Master 管理集群。
-![HBase 系统架构](../resources/archi.jpg)
+![HBase 系统架构](../../src/img/archi.jpg)
 
 #### 客户端
 
@@ -54,12 +54,7 @@ HBase 底层依赖 HDFS 组件存储数据，包括用户数据文件、HLog 日
 
 #### Shell
 
-HBase 客户端使用 Java 开发，通过 ThriftServer 可以支持其他语言，除此之外 HBase 还提供了交互式的 Shell 客户端，其本质是使用 JRuby 脚本调用 Java 客户端实现。
 
-```sh
-# 启动 HBase Shell
-./hbase shell
-```
 
 #### Put
 

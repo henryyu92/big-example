@@ -12,7 +12,6 @@
     <modules>
         <module>big-parent</module>
         <module>big-flink</module>
-        <module>big-hbase</module>
         <module>big-elasticsearch</module>
         <module>big-spark</module>
         <module>big-pulsar</module>
