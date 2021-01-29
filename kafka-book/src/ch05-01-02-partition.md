@@ -1,50 +1,60 @@
 # 分区管理
 
-## 修改副本因子
-修改副本因子的功能是通过重分配所使用的 ```kafka-reassign-partitions.sh``` 来实现的，只需要在 JSON 文件中增加或减少 replicas 的参数即可：
-```shell
-{
-  "topic":"topic-throttle",
-  "pritition":1,
-  "replicas":[0,1,2],
-  "log_dirs":["any","any","any"]
-}
+Kafka 集群不会自动迁移副本，当集群中的某个节点异常时，节点上的分区副本会失效，当增加节点时集群的负载不会均衡到新的节点。
 
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
---execute --reassignment-json-file add.json
-```
+Kafka 提供了脚本方式管理主题的分区，通过 `bin/kafka-reassign-partitions.sh` 工具可以在集群扩容或者节点异常时采用分区重新分配的方式迁移副本。
 
 ## 分区重分配
-当集群中的一个节点宕机时，该节点上的分区副本都会失效，Kafka 不会将这些失效的分区副本自动的转移到集群中的其他节点；当新增节点时，只有新创建的主题才能分配到该节点而之前的主题不会自动转移到该节点。
 
-为了保证分区及副本再次进行合理的分配，Kafka 提供了 ```kafka-reassign-partitions.sh``` 脚本来执行分区重新分配的工作，它可以在集群扩容、broker 节点失效的场景下对分区进行迁移。
+`kafka-reassign-partition.sh` 脚本提供了 `--generate` 选项用于生成分区分配方案，在生成分区分配方案时需要通过 `--topic-to-move-json-file` 指定需要重新分配分区的主题，并且需要通过 `--broker-list` 选项指定参与分区重分配的 Broker。
 
-```kafka-reassign-partitions.sh``` 脚本使用时需要先创建包含主题清单的 JSON 文件，然后根据主题清单和 broker 节点清单生成一份重分配方案，最后根据分配方案执行具体的重分配动作。
 ```shell
-reassign.json：
-{"topics":[{"topic":"topic-reassign"}],"version":1}
+# reassign.json：
+#   {"topics":[{"topic":"topic-reassign"}],"version":1}
 
-# --generate 用于生成一个重分配的候选方案
-# --topics-to-move-json-file 用来指定分区重分配对应的主题清单文件的路径
-# --broker-list 用来指定所要分配的 broker 节点列表
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
---generate --topics-to-move-json-file reassign.json \
+# --generate 生成一个重分配的候选方案
+# --topics-to-move-json-file 指定分区重分配对应的主题清单文件的路径
+# --broker-list 指定用于分配的 broker 列表
+
+bin/kafka-reassign-partitions.sh \
+--generate \
+--bootstrap-server localhost:9092 \
+--topics-to-move-json-file reassign.json \
 --broker-list 0,2
-
-# --execute 用于指定执行重分配的动作
-# --reassignment-json-file 指定分区重分配方案的文件路径(重分配方案即上个脚本的输出)
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 --execute --reassignment-json-file project.json
 ```
-除了脚本自动生成分区重分配候选方案，也可以自定义分区分配方案，只需要自定义分区分配的 json 文件即可。
-
-分区重分配的基本原理是先通过控制器为每个分区添加新的副本，新的副本将从分区的 leader 副本复制所有的数据，在复制完成之后控制器将旧的副本从副本清单里移除。使用 verify 指定可以查看分区重分配的进度：
+根据生成的分区重分配方案，使用 `kafka-reassign-partitions.sh` 脚本提供的 `--execute` 选项执行指定分区分配方案，分区分配方案通过选项 `--reassignment-json-file` 指定，文件中的内容就是生成的分区分配方案。
 ```shell
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
---verify --reassignment-json-file project.json
+# project.json:
+#   {"version":1,
+#    "partitions":[
+#       {"topic":"topic-reassignment","partition":0,"replicas":[2,1],"log_dirs":["any","any"]},
+#       {"topic":"topic-reassignment","partition":1,"replicas":[1,2],"log_dirs":["any","any"]}
+#    ]
+#   }
+
+# --execute 指定执行重分配的动作
+# --reassignment-json-file 分区重分配方案的文件路径
+bin/kafka-reassign-partitions.sh \
+--execute \
+--bootstrap-server localhost:9092 \
+--reassignment-json-file project.json
+```
+`kafka-reassign-partitions.sh` 脚本还提供了 `--list` 选项查看进行中的分区重分配，`--cancel` 选项取消指定的分区重分配，`--verify` 验证分区重分配是否按照指定的方案完成。
+```shell
+bin/kafka-reassign-partitions.sh --list
+
+bin/kafka-reassign-partitions.sh --cancel --reassignment-json-file reassignment-file.json
+
+bin/kafka-reassign-partitions.sh --verify --reassignment-json-file reassignment-file.json
+
 ```
 分区重分配对集群的性能有很大影响，在实际操作中可以降低重分配的粒度，分批次来执行重分配以减少带来的影响。如果要将某个 broker 下线那么在执行分区重分配操作之前最好关闭或重启 broker，这样这个 broker 就不包含 leader 副本可以提升重分配的性能，减少对集群的影响。
 
 ## 复制限流
+
+分区重分配的基本原理是先通过控制器为每个分区添加新的副本，新的副本将从分区的 leader 副本复制所有的数据，在复制完成之后控制器将旧的副本从副本清单里移除。
+
+
 分区重分配的本质在于数据复制，当重分配的量比较大则会影响集群的性能因此需要对副本间的复制流量进行限制来保证重分配期间整个服务不会受太大影响。
 
 副本间的复制限流有两种实现方式：```kafka-configs.sh``` 脚本和 ```kafka-reassign-partitions.sh``` 脚本：

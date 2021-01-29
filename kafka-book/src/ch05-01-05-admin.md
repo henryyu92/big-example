@@ -1,7 +1,5 @@
-# 集群管理
+# KafkaAdminClient
 
-
-## KafkaAdminClient
 KafkaAdminClient 提供了 API 的方式对 Kafka 的主题、brokers、配置和 ACL 的管理：
 ```java
 public class TopicManager {
