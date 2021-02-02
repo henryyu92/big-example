@@ -46,16 +46,19 @@ bin/kafka-reassign-partitions.sh --list
 bin/kafka-reassign-partitions.sh --cancel --reassignment-json-file reassignment-file.json
 
 bin/kafka-reassign-partitions.sh --verify --reassignment-json-file reassignment-file.json
-
 ```
-分区重分配对集群的性能有很大影响，在实际操作中可以降低重分配的粒度，分批次来执行重分配以减少带来的影响。如果要将某个 broker 下线那么在执行分区重分配操作之前最好关闭或重启 broker，这样这个 broker 就不包含 leader 副本可以提升重分配的性能，减少对集群的影响。
+
+分区重分配的基本原理是先通过控制器为每个分区添加新的副本，然后副本从 leader 副本复制所有的数据，复制完成后控制器将旧的副本移除。分区重分配会占用集群大量的资源，在执行分区重分配时通常会限制副本间的复制流量从而减少对集群的影响。
+
+`kafka-reassign-partitions.sh` 脚本提供了选项 `--throttle` 和 `--replica-alter-log-dir-throttle` 控制副本复制过程的流量。
+```shll
+bin/
+```
 
 ## 复制限流
 
-分区重分配的基本原理是先通过控制器为每个分区添加新的副本，新的副本将从分区的 leader 副本复制所有的数据，在复制完成之后控制器将旧的副本从副本清单里移除。
 
 
-分区重分配的本质在于数据复制，当重分配的量比较大则会影响集群的性能因此需要对副本间的复制流量进行限制来保证重分配期间整个服务不会受太大影响。
 
 副本间的复制限流有两种实现方式：```kafka-configs.sh``` 脚本和 ```kafka-reassign-partitions.sh``` 脚本：
 
@@ -125,4 +128,29 @@ bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 ```
 bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 \
 --verify --reassignment-json-file project.json
+```
+
+
+### 优先副本选举
+当 leader 副本退出时 follower 副本被选择为新的 leader 从而导致集群的负载不均衡，为了治理负载失衡的情况，Kafka 引入了优先副本(preferred replica)的概念，优先副本指的是在 AR 集合列表中的第一个副本，理想情况下优先副本是分区的 leader 副本。Kafka 需要确保所有主题的优先副本在集群中均匀分布，这样也就保证了所有分区的 leader 副本均衡分布。
+
+优先副本选举是指通过一定的方式促使优先副本选举为 leader 副本以此来促进集群的负载均衡，也称为 “分区平衡”。分区平衡并不意味着 Kafka 集群的负载均衡，还需要考虑分区的均衡和 leader 副本负载的均衡。
+
+Kafka 提供分区自动平衡的功能，配置参数 ```auto.leader.rebalance.enable``` 为 true 就开启了分区自动平衡，默认是开启的。分区自动平衡开启后，Kafka 的控制器会启动一个定时任务，这个定时任务会轮询所有的 broker 节点并计算每个 broker 节点的分区不平衡率(非优先副本 leader 个数/分区总数)是否超过 ```leader.imbalance.per.broker.percentage``` 参数配置的比值，默认是 10%，如果超过次比值则会自动执行优先副本的选举动作以求分区平衡，执行周期由 ```leader.imbalance.cheek.interval.seconds``` 控制，默认是 300s。在生产环境中不建议开启，因为在执行优先副本选举的过程中会消耗集群的资源影响线上业务，更稳妥的方式是自己手动执行分区平衡。
+
+Kafka 中的 ```kafka-preferred-replica-election.sh``` 脚本提供了对分区 leader 副本进行重新平衡的功能，优先副本的选举过程是一个安全的过程，Kafka 客户端可以自动感知分区 leader 副本的变更。
+```shell
+bin/kafka-preferred-replica-election.sh --zookeeper localhost:2181
+```
+Kafka 将会在集群上所有的分区都执行一遍优先副本的选举操作，如果分区比较多则有可能会失败；在优先副本选举的过程中元数据信息会存入 ZooKeeper 的 /admin/preferred_replica_election 节点，如果元数据过大则选举就会失败。```kafka-preferred-replica-election.sh``` 脚本提供了 path-to-json-file 参数来对指定分区执行优先副本的选举操作：
+```
+{
+  "partitions":[
+    {"partition":0,"topic":"topic-partitions"},
+    {"partition":1,"topic":"topic-partitions"},
+    {"partition":2,"topic":"topic-partitions"},
+  ]
+}
+
+bin/kafka-preferred-replica-election.sh --zookeeper localhost:2181 --path-to-json-file election.json
 ```
