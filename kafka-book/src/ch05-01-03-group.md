@@ -1,4 +1,7 @@
 # 消费组管理
+Kafka 通过 `kafka-consumer-groups.sh` 脚本提供了对消费组及其消费位移的管理。
+
+## 查看消费组
 
 在 Kafka 中可以通过 ```kafka-consumer-groups.sh``` 脚本查看或变更消费组信息，通过 list 指令列出当前集群中所有的消费组：
 ```shell
@@ -32,7 +35,7 @@ bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 --delete --group groupIdMonitor
 ```
 
-#### 消费位移管理
+## 消费位移管理
 ```kafka-consumer-groups.sh``` 脚本提供了通过 reset-offsets 指令来重置消费组内的消费位移，前提是该消费组内没有消费者运行：
 ```shell
 bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
