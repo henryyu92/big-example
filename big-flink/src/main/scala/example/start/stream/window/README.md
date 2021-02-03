@@ -26,12 +26,44 @@ Flink 支持基于时间的窗口和基于数量的窗口。
 
 滚动窗口根据固定时间或大小进行切分，且窗口和窗口之间的元素互相不重叠，Flink 提供了基于事件时间和基于处理时间的滚动窗口，对应的 WindowAssigner 分别为 TumblingEventTimeWindows 和 TumblingProcessTimeWindows，调用 DataStream 的 window 方法指定使用的 WindowAssigner
 ```scala
-var stream: DataStream[T];
+var stream: DataStream[T]
 
 val eventTimeTumblingWindowStream = stream.keyBy(_.1)
-//  .window(TumblingProcessTimeWindows.of(Time.second(10)))
     .window(TumblingEventTimeWindows.of(Time.second(10)))
+
+val processTimeTumblingWindowStream = streama.keyBy(_.1)
+    .window(TumblingProcessingTimeWindows.of(Time.second(1)))
 ```
 默认窗口时间的时区是 UTC-0 因此在其他时区需要考虑时差
 
-滑动窗口
+滑动窗口增加了滑动时间，并且允许窗口数据发生重叠，滑动窗口根据滑动时间滑动，窗口之间的重叠数据由窗口大小和滑动时间决定
+```scala
+var stream: DataStream[T]
+
+val slidingEventTimeWindowStream = stream.keyBy(_.1)
+    .window(SlidingEventTimeWindows.of(Time.second(1)))
+
+val slidingProcessingTimeWindowStream = stream.keyBy(_.1)
+    .window(SlidingProcessingTimeWindows.of(Time.second(1)))
+```
+会话窗口将某段时间内活跃度较高的数据聚合成一个窗口进行计算，窗口的触发条件是 Session Gap，也就是在规定的时间内没有活跃的数据接入则认为窗口结束，然后触发窗口计算。
+```scala
+var stream: DataStream[T]
+
+val eventTimeSessionWindowStream = stream.keyBy(_.1)
+    .window(EventTimeSessionWindows.withGap(Time.second(1)))
+
+val processingTimeSessionWindowStream = stream.keyBy(_.1)
+    .window(ProcessingTimeSessionWindows.withGap(Time.second(10)))
+```
+通过 SessionWindowTimeGapExtractor 能够动态的调整会话窗口 Session Gap
+```scala
+var stream: DataStream[T]
+
+val eventTimeSessionWindowStream = stream.keyBy(_.1)
+    .window(EventTimeSessionWindows.withDynamicGap(new SessionWindowTimeGapExtractor[String] {
+      override def extract(element: String): Long = {
+        // ...
+      }
+    }))
+```
