@@ -1,5 +1,7 @@
 # KafkaAdminClient
 
+Kafka 提供的脚本工具对应着 `kafka.admin` 包下的 Command 类
+
 KafkaAdminClient 提供了 API 的方式对 Kafka 的主题、brokers、配置和 ACL 的管理：
 ```java
 public class TopicManager {
@@ -42,3 +44,5 @@ public class TopicManager {
     }
 }
 ```
+
+# AdminManager

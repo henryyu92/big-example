@@ -36,7 +36,7 @@
       - [分区管理](./ch05-01-02-partition.md)
       - [消费组管理](./ch05-01-03-group.md)
       - [配置管理](./ch05-01-04-config.md)
-      - [KafkaAdminClient](./ch05-01-05-admin.md)
+      - [KafkaAdmin](./ch05-01-05-admin.md)
     - [集群监控](./ch05-02-monitor.md)
 - [Kafka Connect](./ch06-00-connect.md)
 - [Kafka Stream](./ch07-00-stream.md)

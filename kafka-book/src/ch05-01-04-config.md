@@ -1,6 +1,12 @@
 # 配置管理
 
-```kafka-configs.sh``` 脚本是专门用来对配置进行操作的，也就是在运行状态下修改原有的配置达到动态变更的目的。脚本包含变更配置 alter 和查看配置 describe 这两种指令类型，支持主题、broker、用户和客户端的配置。
+Kafka 提供了 `kafka-configs.sh` 脚本用于在集群运行状态下修改集群的配置参数从而达到动态变更配置的目的。
+
+`kafka-confgis.sh` 脚本支持主题、broker、客户端、用户的参数动态配置，并提供了 `--alter` 指令修改配置参数以及 `--describe` 指令查看配置参数信息。
+
+使用 `kafka-configs.sh` 脚本管理配置时需要通过 `--entity-type` 和 `entity-name` 参数指定需要操作的类型
+
+
 
 ```kafka-configs.sh``` 使用 --entity-type 参数指定操作配置类型，使用 --entity-name 参数指定配置配置的名称，对应关系为：
 

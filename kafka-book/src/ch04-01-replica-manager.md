@@ -1,14 +1,16 @@
 # ReplicaManager
 
-Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本。其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
+Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本，其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
+
+为了平衡数据写入的效率和数据的可靠性，Kafka 引入副本集合的概念，每个分区的副本都会划分到三个集合中：
+- **AR(Assigned Replica)**： 分区中所有副本的集合
+- **ISR(In-Sync Replica)**： 和 Leader 副本保持同步的副本集合，包括 Leader 副本
+- **OSR(Out-of-Sync Replica)**： 没有和 Leader 副本保持同步的副本集合
+
+## ISR 管理
+数据写入到分区的副本中才能被读取，Kafka 定义了 LEO
 
 
-## Leader 选举
-
-
-## CheckPoint
-
-每个分区有多个副本，Kafka 保证同一个分区的副本分布在不同的节点上。分区的所有副本集合为 AR(Assigned Replica)，和 leader 副本保持同步的 follower 副本集合为 ISR(In-sync Replica)，未能和 leader 副本保持同步的 follower 副本集合为 OSR(Outof-sync Rplica)，即 AR = ISR + OSR + leader。
 
 副本的 LEO (LogEndOffset) 表示副本中最后一条消息的 offset + 1，ISR 中最小的 LEO 是整个分区的 HW，消费者只能拉取到 HW 之前的消息，因此消息只有在 ISR 中所有的副本同步之后才能被消费者拉取到。**ISR 发生变化或者 ISR 中任意一个副本的 LEO 发生变化都可能影响整个分区的 HW**
 
@@ -16,7 +18,7 @@ Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个�
 问题：如果在 ISR 同步数据完成前，leader 不可用，消息是否丢失？
 ```
 
-#### ISR
+## ISR
 Kafka 中 leader 是从 ISR 的副本中选举的，当副本不能与 leader 副本保持同步就需要将其移出 ISR 集合。Kafka 在启动 ```ReplicaMananger``` 时创建了 ```isr-expiration``` 线程监控 ISR 中副本的同步状态，该线程会以 ```replicaLagTimeMaxMs/2``` 的周期(```replica.lag.time.max.ms``` 设置，默认 10000ms)遍历 ISR 中的所有副本，当副本的 LEO 和 leader 副本的 LEO 不相等并且副本上次和 leader 副本保持一致的时间 (lastCaughtUpTimeMs) 与当前时间相差 ```replicaLagTimeMaxMs``` 则会被移出 ISR。即 **ISR 中的副本和 leader 副本不能保持同步的最长时间为 ```1.5 * replicaLagTimeMaxMs```**。
 ```java
 private def isFollowerOutOfSync(replicaId: Int,
@@ -80,14 +82,14 @@ Kafka 控制器为 ```/isr_change_notification``` 添加了一个 Watcher，当�
 当 follower 的 LEO 追赶上 leader 副本之后就可以进入 ISR 集合，追赶上的判定标准是此副本的 LEO 不小于 leader 副本的 HW，ISR 扩充之后同样会更新 ZooKeeper 中的 /brokers/topics/<topic>/paritition/<partition>/state 节点和 isrChangeSet
 
 
-#### 恢复点
+## CheckPoint
 Kafka 中分区的信息被副本所在的 broker 节点上的 ```ReplicaMananger``` 管理。leader 副本记录了所有副本的 LEO，而其他 follower 副本只记录了自己的 LEO，leader 副本在收到 follower 副本的 FetchRequest 请求之后在将数据返回给 follower 副本之前会先更新对应的 LEO。
 
 Kafka 使用 ```recovery-point-offset-checkpoint``` 和 ```replication-offset-checkpoint``` 两个文件分别记录分区的 LEO 和 HW。LogManager 在启动时创建线程用于周期性的刷写数据到这两个文件，其中 ```kafka-recovery-point-checkpoint``` 线程定期将分区的 LEO 刷写到 ```recovery-point-offset-checkpoint``` 文件中，周期为参数 ```log.flush.offset.checkpoint.interval.ms``` 设置，默认为 60000ms；``` ...``` 线程定期将所有分区的 HW 刷写到 ```replication-offset-checkpoint``` 文件中，周期由参数 ```replica.high.watermark.checkpoint.interval.ms``` 设置，默认为 5000ms。
 
 分区日志的删除或者手动删除消息会导致日志的 ```LogStartOffset``` 增长，Kafka 将 ```LogStartOffset``` 持久化在 ```log-start-offset-checkpoint``` 文件中，ReplicaManager 在启动时创建 ```kafka-log-start-offset-checkpoint``` 线程将所有分区的 ```LogStartOffset``` 刷写到文件中，周期由参数 ```log.flush.start.offset.checkpoint.interval.ms``` 设置，默认为 60000ms。
 
-### 副本分配
+## 副本分配
 
 Kafka 保证同一分区的不同副本分配在不同的节点上，不同分区的 leader 副本尽可能的均匀分布在集群的节点中以保证整个集群的负载均衡。
 
@@ -199,8 +201,6 @@ private def assignReplicasToBrokersRackAware(nPartitions: Int,
 }
 ```
 
-
-
 ### 副本同步
 
 follower 副本向 leader 副本拉取数据的细节在 ```ReplicaManager#makeFollower``` 中。
@@ -210,3 +210,6 @@ https://www.jianshu.com/p/f9a825c0087a
 ### Leader 选举
 
 #### Leader Epoch
+
+
+## 副本管理参数
