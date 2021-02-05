@@ -1,4 +1,6 @@
-# 控制器
+# KafkaController
+
+Kafka 
 
 ### 控制器
 Kafka 集群中会有一个或多个 broker，其中有一个 broker 会被选举为控制器(controller)，它负责管理整个集群中所有分区和副本的状态。当分区的 leader 副本故障时由控制器负责为该分区选举新的 leader 副本；当分区 ISR 集合发生变化时由控制器负责通知所有 broker 更新其元数据信息；当使用 ```kafka-topics.sh``` 为 topic 增加分区时也是由控制器负责分区的重新分配。
