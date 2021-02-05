@@ -1,11 +1,13 @@
-# OffsetManager
-
-
-## Offset
+# GroupCoordinator
 
 
 
-## `__consumer_offset`
+## offset 管理
+
+https://www.cnblogs.com/heyanan/p/12800169.html
+
+
+### `__consumer_offset`
 
 Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offsets``` 中，消费者在向 broker 拉取数据时，broker 在 ```__consumer_offsets``` 中获取拉取的起始消息位置。
 
@@ -28,3 +30,6 @@ Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offset
 ```shell
 ```
 如果有若个案消费者消费了某个主题的消息，并且也提交了相应的消费位移，那么在删除这个主题之后会一并将这些消费位移信息删除。
+
+## 消费组管理
+
