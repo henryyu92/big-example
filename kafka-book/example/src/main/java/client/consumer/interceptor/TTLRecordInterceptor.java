@@ -1,4 +1,4 @@
-package client.consumer;
+package client.consumer.interceptor;
 
 
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;

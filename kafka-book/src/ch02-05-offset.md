@@ -11,53 +11,31 @@ public long position(TopicPartition partition)
 ```
 `KafkaConsumer` 默认是自动提交 offset，即参数 `enable.auto.commit` 设置为 true，默认情况下消费者客户端每隔固定周期计算当前每个分区已经拉取的最大消息 offset 并在下次拉取消息时提交，间隔时间由参数 `auto.commit.interval.ms` 配置，默认 5s。
 
-Kafka 提供了手动提交位移，使用手动位移提交需要关闭自动提交即 `enable.auto.commit=false`，然后使用 `KafkaConsumer#commitSync()` 同步提交或者使用 `KafkaConsumer#commitAsync()` 异步提交。
+自动提交 offset 不能控制提交的精度，因此 Kafka 提供了手动提交位移，使用手动位移提交需要关闭自动提交即 `enable.auto.commit=false`，然后使用 `KafkaConsumer#commitSync()` 同步提交或者使用 `KafkaConsumer#commitAsync()` 异步提交。
 
 ## 同步提交
-同步提交方式会阻塞线程直到 offset 提交完成，
+同步提交方式会阻塞线程直到 offset 提交完成或者超时，`KafkaConsumer` 提供了三种重载的同步提交 offset 的方法：
 ```java
-final int batchSize = 200;
-List<ConsumerRecord> buffer = new ArrayList<>();
-while(isRunning){
-  ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-  for(ConsumerRecord<String, String> record : records){
-    buffer.add(record);
-  }
-  if(buffer.size() >= batchSize){
-    consumer.commitSync();
-    buffer.clear();
-  }
-}
+// 默认阻塞 default.api.timeout.ms 配置的时间
+public void commitSync()
+
+// 阻塞指定的时间
+public void commitSync(Duration timeout)
+
+// 提交指定分区的 offset，阻塞指定的时间
+public void commitSync(final Map<TopicPartition, OffsetAndMetadata> offsets, final Duration timeout)
 ```
-同步提交会根据 poll 方法拉取的最新位移进行提交，只要没有发生不可恢复的错误就会一直阻塞线程直到提交完成。使用无参的 ```commitSync()``` 方法同步提交时提交频率和消息处理的频率一致并且也存在消息重复的问题，如果需要细粒度控制提交则可以使用 ```commitSync(Map<TopicPartition, OffsetAndMetadata>)``` 方法：
+同步提交会阻塞线程，通过手动提交 offset 可以控制提交的精度：
 ```java
-while(isRunning){
-  ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-  for(ConsumerRecord<String, String> record : records){
-    // 消息的 offset
-    long offset = record.offset();
-    TopicPartition partition = new TopicPartition(record.topic(), record.partition());
-    // 提交分区的 offset
-    consumer.commitSync(Collections.singletonMap(partition, new OffsetAndMetadata(offset + 1)))
-  }
+ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(10));
+
+// 按照数量提交
+if(records.size() > batchSize){
+  consumer.commitSync();
 }
-```
-同步提交消费位移时阻塞式的，因此可以按照分区的粒度来进行提交：
-```java
-while (isRunning){
-  // 拉取消息
-  ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-  // 按照分区来分组消息集合
-  for(TopicPartition partition : records.partitions()){
-    List<ConsumerRecord<String, String>> partitionRecords = records.records(partition);
-    for (ConsumerRecord<String, String> record : partitionRecords){
-      // do some logical processing.
-    }
-    // 分区最后一条消息的 offset
-    long lastConsumedOffset = partitionRecords.get(partitionRecords.size() - 1).offset();
-    consumer.commitSync(Collections.singletonMap(partition, new OffsetAndMetadata(lastConsumedOffset + 1)));
-  }
-}
+
+// 按照分区提交
+Iterator<ConsumerRecord> iter = records.iterator();
 ```
 ## 异步提交
 异步提交(commitAsync)的方式在提交时不会阻塞消费者线程，可能在提交消费位移结果返回之前开始了新一次的拉取操作。KafkaConsumer 提供了三个重载方法用于异步提交：

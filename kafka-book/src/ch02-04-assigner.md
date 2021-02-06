@@ -9,7 +9,7 @@ GroupAssignment assign(Cluster metadata, GroupSubscription groupSubscription);
 // 返回表示分区器唯一标识的名字
 String name();
 ```
-在实现自定义分区算法时通常继承 `AbstractPartitionAssignor` 并重写 `assign` 方法。Kafka 内置了三种分区分配策略，默认使用 `RangeAssigner` 策略分配分区，需要显式指定分区策略时可以通过 Kafka 提供的消费者客户端参数 `partition.assignment.strategy` 设置：
+实现自定义分区算法时通常继承 `AbstractPartitionAssignor` 并重写 `assign` 方法。Kafka 默认使用 `RangeAssigner` 策略分配分区，显式指定分区策略时可以通过 Kafka 提供的消费者客户端参数 `partition.assignment.strategy` 设置：
 ```java
 properties.setProperty("partition.assignment.strategy", "partition-assignment-strategy-class");
 ```
