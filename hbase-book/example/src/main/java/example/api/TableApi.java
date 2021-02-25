@@ -97,4 +97,12 @@ public class TableApi extends BaseApi {
             e.printStackTrace();
         }
     }
+
+    public void familyFilter(){
+        Scan scan = new Scan();
+        FamilyFilter ff = new FamilyFilter(CompareOperator.NOT_EQUAL, new BinaryComparator(Bytes.toBytes("c")));
+        ColumnRangeFilter qf = new ColumnRangeFilter(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true);
+        FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL, ff, qf);
+        scan.setFilter(filterList);
+    }
 }

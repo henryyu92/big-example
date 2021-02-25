@@ -12,7 +12,8 @@ properties.put("value.deserializer", "value.deserializer.class.name");
 ```
 消费者客户端在消费消息后需要向集群提交消费位移，在多线程情况下不能保证消费位移的正确提交，因此消费者客户端不是线程安全的。
 
-Kafka 采用发布/订阅(Pub/Sub)模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
+## 主题订阅
+Kafka 采用发布/订阅模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
 ```java
 // 以集合的方式订阅主题
 subscribe(Collection<String> topics, ConsumerRebalanceListener listener)
