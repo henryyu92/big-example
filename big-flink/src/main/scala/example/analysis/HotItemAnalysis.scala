@@ -22,7 +22,7 @@ object HotItemAnalysis {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setParallelism(1)
-    // 设置事件事件
+    // 设置事件时间语义
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
     val inputStream = env.readTextFile("")
@@ -32,14 +32,14 @@ object HotItemAnalysis {
     })
       .assignAscendingTimestamps(_.timestamp * 1000)
 
-    // 窗口聚合
+    // 窗口聚合，计算每个窗口中每个 item 的 pv 数
     val aggStream = dataStream
       .filter(_.behavior == "pv")
       .keyBy("itemId")
       .timeWindow(Time.hours(1), Time.minutes(5))
       .aggregate(new CountAgg(), new ItemViewWindowResult())
 
-    // 窗口排序
+    // 排序窗口聚合后的结果
     val resultStream = aggStream
       .keyBy("windowEnd")
       .process(new TopNHotItems(5))
