@@ -11,7 +11,7 @@
 
     <properties>
         <hbase-version>2.2.4</hbase-version>
-        <flink-version>1.10.0</flink-version>
+        <flink-version>1.12.0</flink-version>
         <scala-version>2.11</scala-version>
         <kafka-version>2.4.1</kafka-version>
         <jdbc-version>8.0.18</jdbc-version>
@@ -107,17 +107,27 @@
             <dependency>
                 <groupId>org.apache.flink</groupId>
                 <artifactId>flink-table-api-scala-bridge_2.11</artifactId>
-                <version>1.10.0</version>
+                <version>${flink-version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>org.apache.flink</groupId>
                 <artifactId>flink-table-planner_2.11</artifactId>
-                <version>1.10.0</version>
+                <version>${flink-version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-planner-blink_2.11</artifactId>
+                <version>${flink-version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <!-- 自定义格式 或者 自定义函数-->
+            <dependency>
+                <groupId>org.apache.flink</groupId>
                 <artifactId>flink-table-common</artifactId>
-                <version>1.10.0</version>
+                <version>${flink-version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!-- Pulsar -->
