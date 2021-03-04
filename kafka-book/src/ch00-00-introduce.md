@@ -89,3 +89,5 @@ Kafka 集群启动时会读取 `$KAFKA_HOME/config/server.properties` 文件中�
 - **`message.max.bytes`**：指定 broker 能接收的消息的最大值，默认为 1000012，超过指定大小的消息被发送到 broker 时会抛出 `RecordTooLargeException`
 
 https://www.cnblogs.com/answerThe/p/11267129.html
+
+https://www.jianshu.com/p/aa274f8fe00f

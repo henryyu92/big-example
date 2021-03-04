@@ -1,4 +1,29 @@
 # KafkaScheduler
+
+KafkaScheduler 是 Kafka 中的任务调度模块，通过封装 `ScheduledThreadPoolExecutor` 以及时间轮算法定义了 Kafka 的延时定时器，提供了对周期性和非周期性执行逻辑的调度。
+
+KafkaScheduler 在 KafkaServer 启动时实例化，在创建 KafkaScheduler 时对 `ScheduledThreadPoolExecutor` 进行了封装：
+```scala
+override def startup(): Unit = {
+  debug("Initializing task scheduler.")
+  this synchronized {
+    if(isStarted)
+      throw new IllegalStateException("This scheduler has already been started!")
+    executor = new ScheduledThreadPoolExecutor(threads)
+    // 执行器 shutdown 之后不再执行周期任务
+    executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false)
+    // 执行器 shutdown 之后不再执行延迟任务
+    executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false)
+    // Task cancel 之后从队列中移除
+    executor.setRemoveOnCancelPolicy(true)
+    executor.setThreadFactory(new ThreadFactory() {
+                              def newThread(runnable: Runnable): Thread = 
+                                new KafkaThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), runnable, daemon)
+                            })
+}
+}
+```
+
 ### 时间轮
 Kafka 中存在大量的延时操作，Kafka 基于时间轮的概念自定义实现了一个用于延时功能的定时器 SystemTimer 使得插入和删除时间复杂度为O(1)。
 
