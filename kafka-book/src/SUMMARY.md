@@ -28,7 +28,7 @@
   - [GroupCoordinator](./ch04-02-group-coordinator.md)
   - [KafkaScheduler](./ch04-03-scheduler.md)
   - [TransactionManager](./ch04-04-transaction.md)
-  - [Controller](./ch04-05-controller.md)
+  - [KafkaController](./ch04-05-controller.md)
 - [集群](./ch05-00-cluster.md)
     - [集群管理](./ch05-01-00-management.md)
       - [主题管理](./ch05-01-01-topic.md)
