@@ -201,16 +201,31 @@ def flush(f: (TimerTaskEntry)=>Unit): Unit = {
 
 Kafka 使用 `DelayedOperation` 表示延迟操作，`onComplete()` 方法定义具体的延迟操作，并仅被调用一次，执行完之后 `isCompleted()` 方法返回 true。onComplete（）可以由forceComplete（）触发，forceComplete（）在delayMs之后强制调用onComplete（），如果操作尚未完成，tryComplete（）则首先检查操作是否可以完成，如果是，则调用forceComplete（）。
 ```scala
-// 延迟操作的具体执行逻辑，仅会被调用一次
+// 延迟操作的具体执行逻辑，在 forceComplete 方法中被调用，保证只会被调用一次
 def onComplete(): Unit
 
+// 检查延迟操作是否可以执行，如果可以则调用 forceComplete
+def tryComplete(): Boolean
 
+// 延迟操作执行完后的回调方法
+def onExpiration(): Unit
+
+// 强制执行延迟操作，如果延迟操作需要执行则从时间轮中取消并且调用 onComplete 方法执行，方法通过 CAS 的方式保证只会有一个线程执行延迟操作
+def forceComplete(): Boolean
 ```
-
+延迟任务在到期后会从时间轮中取出交由线程池执行，`DelayedOperation` 实现了 `Runnable` 接口，在 run 方法中定义了d延迟操作到期时的执行：
+```scala
+override def run(): Unit = {
+  if (forceComplete())
+    onExpiration()
+}
+```
 
 ### DelayedOperationPurgatory
 
-`DelayedOperationPurgatory` 是 Kafka 提供的管理 `DelayedOperation` 以及处理到期 `DelayedOperation` 的功能的组件，
+`DelayedOperationPurgatory` 是 Kafka 提供的管理 `DelayedOperation` 的组件，包含了两个重要的属性：
+- timeoutTimer
+-
 
 - TimingWheel 在创建的时候以当前系统时间为第一层时间轮的起始时间(startMs)
 - TimingWheel 中的每个双向环形链表 TimerTaskList 都会有一个哨兵节点(sentinel)，引入哨兵节点可以简化边界条件
@@ -240,3 +255,5 @@ Kafka 在处理拉取请求时，会先读取一次日志文件，如果收集�
 
 
 https://my.oschina.net/anur/blog/2252539
+
+https://www.jianshu.com/p/605268a19d94
