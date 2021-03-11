@@ -4,3 +4,10 @@ authors = []
 language = "en"
 multilingual = false
 src = "src"
+
+[output.html.playpen]
+editable = true
+eidtor = "ace"
+
+[output.html.fold]
+enable = true
