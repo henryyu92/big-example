@@ -16,7 +16,7 @@
         <kafka-version>2.4.1</kafka-version>
         <jdbc-version>8.0.18</jdbc-version>
         <pulsar.version>2.5.1</pulsar.version>
-        <elasticsearch.version>7.7.1</elasticsearch.version>
+        <elasticsearch.version>7.11.2</elasticsearch.version>
     </properties>
 
     <repositories>
