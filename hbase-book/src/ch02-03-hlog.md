@@ -1,6 +1,24 @@
 ## HLog
 
-HBase 中系统故障恢复以及主从复制都是基于 HLog 实现。默认情况下，所有的写入操作(增加、更新和删除)的数据都先以追加形式写入 HLog，然后再写入 MemStore，当 RegionServer 异常导致 MemStore 中的数据没有 flush 到磁盘，此时需要回放 HLog 保证数据不丢失。此外，HBase 主从复制需要主集群将 HLog 日志发送给从集群，从集群在本地执行回放操作，完成集群之间的数据复制。
+HLog 是 RegionServer 上的追加日志，每个 RegionServer 上只拥有一个 HLog，也就是 RegionServer 上的多个 Region 共享一个 HLog。
+
+HBase 中写操作 (put, delete) 的数据都会先以追加的形式写入 HLog，然后再写入 MemStore。当 RegionServer 异常时，MemStore 中尚未 flush 到磁盘的数据就会丢失，HBase 通过回放 HLog 保证写入的数据不丢失。
+
+HLog 也会用于集群之间的复制，主集群将 HLog 日志发送给从集群，从集群在本地执行回放操作就可以完成集群之间的数据复制。
+
+```
+HLog 发送时机？
+```
+
+HBase 中所有的数据都存储在 HDFS 的指定目录 (默认 /hbase) 下，通过 Hadoop 命令可以查看 HLog 相关目录：
+
+```
+hdfs dfs get /hbase
+
+
+```
+
+ 
 
 
 
@@ -27,10 +45,12 @@ HLog 文件生成之后并不会永久存储在系统中，HLog 整个生命周�
 
 ### HLog 结构
 
-### HLog 创建
+### HLog 生命周期
 
-### HLog 滚动
+#### HLog 创建
 
-### HLog 失效
+#### HLog 滚动
 
-### HLog 删除
+#### HLog 失效
+
+#### HLog 删除
