@@ -139,16 +139,6 @@ Major 合并将所有的文件合成一个，这个过程是通过执行合并�
 
 
 
-
-
-## Region Split
-
-Region 的分裂是在 RegionServer 上独立运行的，Master 不会参与。当一个 Region 内的存储文件大于 ```hbase.hregion.max.filesize``` 时，该 Region 就需要分裂为两个
-
-
-
-
-
 ## In-Memory Compaction
 
 HBase 2.x 版本引入了 Segment 的概念，本质上是一个维护一个有序的 cell 列表，根据 cell 列表是否可更改，Segment 可以分为两种类型：

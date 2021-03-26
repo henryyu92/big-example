@@ -27,7 +27,8 @@ object WordCount {
     // transform
     val transformedStream = stream.flatMap(_.split(" "))
       .map((_, 1))
-      .keyBy(0)
+      .keyBy(_._1)
+//      .keyBy(0)
       .sum(1)
 
     // 输出(sink)

@@ -1,4 +1,11 @@
 ### HLog
+
+HLog 是 HBase 中 WAL (Write Ahead Log) 的实现，通常用于数据的容错和恢复。默认情况下，HLog 会记录下所有的数据变更到 HDFS，当 RegsionServer 发生异常时通过回放 HLog 可以恢复写入到 MemStore 但是还未刷盘到 HFile 的数据。
+
+每个 RegionServer 只有一个 HLog，RegionServer 上的所有 Region 共用同一个 HLog。所有的写操作 (Put 和 Delete) 都会先追加到 HLog 然后再写入 MemStore。
+
+
+
 HBase 中系统故障恢复以及主从复制都是基于 HLog 实现。默认情况下，所有的写入操作(增加、更新和删除)的数据都先以追加形式写入 HLog，然后再写入 MemStore，当 RegionServer 异常导致 MemStore 中的数据没有 flush 到磁盘，此时需要回放 HLog 保证数据不丢失。此外，HBase 主从复制需要主集群将 HLog 日志发送给从集群，从集群在本地执行回放操作，完成集群之间的数据复制。
 
 每个 RegionServer 默认拥有一个 HLog，1.1 版本后可以开启 MultiWAL 功能允许多个 HLog，每个 HLog 是多个 Region 共享的。HLog 中，日志单元 WALEntry 表示一次行级更新的最小追加单元，由 HLogKey 和 WALEdit 两部分组成，其中 HLogKey 由 tableName, regionName 以及 sequenceId 组成

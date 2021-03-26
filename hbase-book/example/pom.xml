@@ -38,10 +38,18 @@
             <version>${hbase-version}</version>
         </dependency>
 
-        <!--        <dependency>-->
-        <!--            <groupId>org.apache.hbase</groupId>-->
-        <!--            <artifactId>hbase-server</artifactId>-->
-        <!--        </dependency>-->
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-testing-util</artifactId>
+            <version>${hbase-version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13</version>
+            <scope>test</scope>
+        </dependency>
 
     </dependencies>
 

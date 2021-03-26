@@ -42,7 +42,7 @@ public class Bytes {
 
     public static String toHex(byte[] buf, int offset, int len) {
         StringBuilder sb = new StringBuilder();
-        for (int i = offset; i < offset; i++) {
+        for (int i = offset; i < len; i++) {
             int x = buf[i];
             if (x > 32 && x < 127) {
                 sb.append((char) x);
@@ -64,7 +64,7 @@ public class Bytes {
 
     public static int toInt(byte[] a) {
         return (a[0] << 24) & 0xFF000000 | (a[1] << 16) & 0x00FF0000 | (a[2] << 8) & 0x0000FF00
-                | (a[3] << 0) & 0x000000FF;
+                | (a[3]) & 0x000000FF;
     }
 
     public static long toLong(byte[] a) {
