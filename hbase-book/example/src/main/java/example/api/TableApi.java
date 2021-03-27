@@ -14,13 +14,16 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.ColumnPrefixFilter;
 import org.apache.hadoop.hbase.filter.ColumnRangeFilter;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PrefixFilter;
 
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * HBase Table API
@@ -84,8 +87,16 @@ public class TableApi extends BaseApi {
         }
     }
 
-    public void scan(String table, String startKey, String stopKey){
+    public void scan(String table, String startKey, String stopKey) throws IOException {
+        Scan scan = new Scan();
 
+        Connection connection = getConnection();
+        Table t = connection.getTable(TableName.valueOf(table));
+
+        ResultScanner scanner = t.getScanner(scan);
+        for (Result r = scanner.next(); r != null ; r = scanner.next()){
+
+        }
     }
 
     public void limitedScan(){
@@ -114,6 +125,10 @@ public class TableApi extends BaseApi {
         Scan scan = new Scan();
         FamilyFilter ff = new FamilyFilter(CompareOperator.NOT_EQUAL, new BinaryComparator(Bytes.toBytes("c")));
         ColumnRangeFilter qf = new ColumnRangeFilter(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true);
+
+        ColumnPrefixFilter cpf = new ColumnPrefixFilter("prefix".getBytes());
+
+
         FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL, ff, qf);
         scan.setFilter(filterList);
     }
