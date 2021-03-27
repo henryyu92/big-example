@@ -1,10 +1,10 @@
 # Summary
 
-- [HBase 介绍](./ch00-00-introduce.md)
-  - [数据模型](./ch00-01-model.md)
-  - [架构](./ch00-02-archi.md)
-- [客户端](./ch01-00-client.md)
-  - [Put](./ch01-01-put.md)
+- [HBase 介绍](./introduce/introduce.md)
+  - [数据模型](./introduce/data-model.md)
+  - [架构](./introduce/archi.md)
+- [客户端](./client/client.md)
+  - [API](./ch01-01-put.md)
   - [Get](./ch01-02-get.md)
   - [Scan](./ch01-03-scan.md)
 - [核心组件](./ch02-00-component.md)

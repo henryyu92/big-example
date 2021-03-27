@@ -39,6 +39,7 @@ ControlleredShutdown 执行过程：
 - Kafka 控制器收到 ControlledShutdownRequest 后开始处理该 broker 上的所有分区副本。  
   如果分区副本数大于 1 且为 leader 副本则需要迁移 leader 副本并更新 ISR，具体的选举分配方案由 ControlledShutdownSelector 提供；如果分区副本只是大于 1，则控制器负责关闭这些副本；如果分区副本数只是 1 那么副本关闭动作会在整个 ControlledShutdown 动作执行之后由副本管理器来执行
   
+
 对于分区副本数大于 1 且 leader 副本位于待关闭 broker 上的情况，如果在 Kafka 控制器处理之后 leader 副本还没有成功迁移，那么会将这些没有成功迁移 leader 副本的分区记录下来并且写入 ControlledShutdownResponse，待关闭的 broker 在收到 ControlledShutdownResponse 之后需要判断整个 ControlledShutdown 动作是否执行成功，以此来进行可能的重试或继续执行接下来的关闭资源动作
 
 自定义 ControlledShutdown 过程，在 KafkaAdminClient 中添加方法：
