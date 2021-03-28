@@ -22,14 +22,14 @@ System.out.println(new String(cell.getValueArray()));
 
 ### GET
 
-`Get` 操作用于查询指定 `rowkey` 的数据，默认情况下请求返回数据的最新版本，通过设置版本参数可以返回多个版本的数据：
+`Get` 操作用于查询指定 `rowkey` 的数据，默认情况下返回最新版本的数据，通过设置版本参数可以返回多个版本的数据：
 
 - `setTimeRange`：设置返回指定范围内的版本
 - `readVersions`：获取指定版本的数据
 - `readAllVersions`：获取所有版本的数据
 
 ```JAVA
-Get get = new Get("rowkey".getBytes());
+Get get = new Get("row".getBytes());
 get.setAllVersions();
 Result result = table.get(get);
 ```
@@ -38,7 +38,7 @@ Result result = table.get(get);
 
 ### PUT
 
-`Put` 操作将数据写入到 HBase 中，每次 Put 操作都会创建一个新版本的 Cell，默认情况下系统使用 ```currentTimeMillis```，可以在 Put 的时候指定版本，但是系统使用时间戳作为版本为了计算 TTL，因此最好不要自行设置版本。
+`Put` 操作将数据写入到 HBase 中，每次 Put 操作都会创建一个新版本的 Cell，默认情况下使用 `RegionServer` 的 ```currentTimeMillis```。可以在 Put 的时候指定版本，但是系统使用时间戳作为版本为了计算 TTL，因此最好不要自行设置版本。
 
 ```java
 Put put = new Put("rowkey".getBytes());
@@ -50,7 +50,7 @@ HBase 客户端支持批量 Put 操作，但是由于 put 会写入到不同的 
 
 ### DELETE
 
-HBase 中的 `Delete` 操作不会立即删除数据，而是通过写入 “墓碑” 消息使 `RegionServer` 在执行 `Major Compaction` 的时候将数据清除。
+HBase 中的 `Delete` 操作不会立即删除数据，而是通过写入 “墓碑” 标记，使 `RegionServer` 在执行 `Major Compaction` 的时候将数据清除。
 
 ```JAVA
 Delete delete = new Delete("rowkey".getBytes());

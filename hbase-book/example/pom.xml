@@ -10,6 +10,7 @@
 
     <properties>
         <hbase-version>2.2.4</hbase-version>
+        <junit-version>4.13.1</junit-version>
     </properties>
 
     <repositories>
@@ -47,7 +48,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.13</version>
+            <version>${junit-version}</version>
             <scope>test</scope>
         </dependency>
 
