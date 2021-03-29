@@ -1,5 +1,9 @@
 ## HFile
 
+An *HFile* is the file format that HBase uses to store data in HDFS. 
+
+
+
 HBase 中 MemStore 的大小达到阈值之后会触发 flush，之后每个 MemStore 生成一个 StoreFile 以 HFile 的格式存储在 HDFS 上。HFile 中存储的是有序的 K-V 对，其中的 K 和 V 都是字节数组。
 
 从逻辑上看 HFile 主要分为 4 个部分：

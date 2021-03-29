@@ -11,36 +11,221 @@ Region 是 Table 的可用性和分布式的最基本元素，Region 由每个�
 
 Region 中的数据是以 LSM 树的形式存放，LSM 树的索引分为两部分：内存部分和磁盘部分。在 Region 中内存部分就是 MemStore，而磁盘部分就是 StoreFile。
 
-### MemoryStore
+## Region Compaction
 
-MemStore 在内存中存储对 Store 的修改，当有 flush 请求时 MemStore 将数据的修改移动到 snapshot 然后清除。HBase 提供新的 MemStore 和备用的 snapshot 供编辑，直到 flusher 通知 flush 成功。当 flush 发生的时候属于同一 Region 的 MemStore 都将会 flush
+HFile 小文件如果数量太多会导致读取效率低，为了提高读取效率，LSM 树体系架构设计了 Compaction，Compaction 的核心功能是将小文件合并成大文件，提高读取效率。
+
+Compaction 是从一个 Region 的一个 Store 中选择部分 HFile 文件进行合并，先从这些待合并的数据文件中依次读出 KeyValue，再由小到大排序后写入一个新的文件，之后新生成的文件就会取代之前已经合并的所有文件对外提供服务。
+
+HBase 根据合并规模将 Compaction 分为两类：
+
+- Minor Compaction：选取部分小的、相邻的 HFile，将它们合并成一个更大的 HFile
+- Major Compaction：将一个 Store 中所有的 HFile 合并成一个 HFile，这个过程会完全清理掉被删除的数据、TTL 过期数据、版本号超过设定版本号的数据。一般情况下 Major Compaction 持续时间比较长，消耗的资源比较多，对业务有比较大的影响，因此线上数据量比较大的通常推荐关闭自动触发 Major Compaction 功能，而是在业务低峰期手动触发
+
+Compaction 有以下核心作用：
+
+- 合并小文件，减少文件数，稳定随机读延迟
+- 提供数据的本地化率，本地化率越高，在 HDFS 上访问数据时延迟就越小(不需要通过网络访问)
+- 清除无效数据，减少数据存储量
+
+Compaction 在执行过程中有个比较明显的副作用：Compaction 操作重写文件会带来很大的带宽压力以及短时间 IO 压力，Compaction 过程需要将小文件数据跨网络传输，然后合并成一个大文件再次写入磁盘。因此 Compaction 操作可以认为是用短时间的 IO 消耗以及贷款消耗换取后续查询的低延迟，从读取响应时间图上可以看到读取响应时间由比较大的毛刺，这是因为 Compaction 在执行的时候占用系统资源导致业务读取性能受到波及。
+
+HBase 中 Compaction 只有在特定的触发条件才会执行，一旦触发就会按照特定的流程执行 Compaction。HBase 会将该 Compaction 交由一个独立的线程处理，该线程首先会从对应 Store 中选择合适的 HFile 文件进行合并，选取文件有多种算法，如：RatioBasedCompactionPolicy、ExploringCompactionPolocy 和 StripeCompactionPolicy 等，也可以自定义实现 Compaction 接口实现自定义的策略，挑选出合适的文件后，HBase 会根据这些 HFile 总大小挑选对应的线程池处理，最后对这些文件执行具体的合并操作。
+
+### Compaction 触发时机
+
+HBase 中触发 Compaction 的时机很多，最常见的有三种：
+
+- MemStore Flush：MemStore Flush 会产生 HFile 文件，在每次执行完 flush 操作之后都会对当前 Store 中的文件数进行判断，一旦 Store 中总文件数大于 hbase.hstore.compactionThreshold 就会触发 Compaction。Compaction 是以 Store 为单位进行的，但是在 flush 触发条件下整个 Region 的所有 Store 都会执行 compaction 检查，所以一个 Region 有可能会在短时间内执行多次 Compaction
+- 后台线程周期性检查：RegionServer 在启动时在后台启动一个 CompactionChecker 线程，用于定期触发检查对应 Store 是否需要执行 Compaction，检查周期为 hbase.server.thread.wakefrequency * hbase.server.compactchecker.interval.multiplier。和 flush 不同的是，该线程优先检查 Store 中总文件数是否大于阈值 hbase.hstore.compactionThreshold，一旦大于就会触发 Compaction；如果不满足，接着检查是否满足 MajorCompaction 条件，如果当前 Store 中 HFile 的最早更新时间早于某个值(hbase.hregion.majorcompaction*(1+hbase.hregion.majorcompaction.jitter))，默认是 7 天
+- 手动触发：手动触发 Compaction 大多是为了执行 Major Compaction，Major Compaction 会比较大的影响业务性能且可以删除无效数据，可以在需要的时候手动触发 Major Compaction
+
+### HFile 集合选择策略
+
+选择合适的文件进行合并是整个 Compaction 的核心，因为合并文件的大小及其当前承载的 IO 数直接决定了 Compaction 的效果以及对整个系统业务的影响程度。
+
+HBase 提供的选择策略会首先对该 Store 中所有 HFile 逐一进行排查，排除不满足条件的部分文件：
+
+- 排除当前正在执行 Compaction 的文件以及比这些文件更新的文件
+- 排除某些过大的文件，如果文件大于 hbase.hstore.compaction.max.size 则排除，默认是 Long.MAX_VALUE
+
+经过排除后留下来的文件称为候选文件，接下来 HBase 再判断候选文件是否满足 Major Compaction 条件，如果满足就会选择全部文件进行合并。只要满足其中一个条件就会执行 Major Compaction：
+
+- 用户强制执行 Major Compaction
+- 长时间没有进行 Major Compaction(上次执行 Major Compaction 的时间早于当前时间 - hbase.hregion.majorcompaction)且候选文件数小于 hbase.hstore.compaction.max，默认 10
+- Store 中含有 reference 文件(Region 分裂产生的临时文件，需要在 Compaction 过程中清理)
+
+如果满足 Major Compaction 则待合并的 HFile 就是 Store 中所有的 HFile，如果不满足则 HBase 需要继续采用文件选择策略选择合适的 HFile。HBase 主要有两种文件选择策略：RatioBasedCompactionPolicy 和 ExploringCompactionPolicy
+
+#### RatioBasedCompactionPolicy
+
+从老到新逐一扫描所有候选文件，满足任意一个条件就停止扫描：
+
+- 当前文件大小小于比当前文件新的所有文件大小总和 * ratio
+- 当前所剩候选文件数小于等于 hbase.store.compaction.min，默认为 3
+
+停止扫描后，待合并的文件就是当前扫描文件以及比它更新的所有文件
+
+#### ExploringCompactionPolicy
+
+Exploring 策略会记录所有合适的文件结合，并在这些文件集合中寻找最优解，即待合并文件数最多或者待合并文件数相同的情况下文件较小
+
+### 挑选合适的执行线程池
+
+选择出了待合并的文件集合之后，需要挑选出合适的处理线程来进行正真的合并操作。HBase 实现了一个专门的类 CompactSplitThread 负责接收 Compaction 请求和 split 请求，为了能够独立处理这些请求，这个类内部构造了多个线程池：
+
+- longCompactions：处理大 Compaction，大 Compaction 并不是 Major Compaction，而是 Compaction 的总文件大小超过 hbase.regionserver.thread.compaction.throttle，且 longCompactions 线程池默认只有 1 个线程，使用参数 hbaes.regionserver.thread.compaction.large 设置
+- shortCompactions：处理小 Compaction
+- splits：负责处理所有的 split 请求
+
+### HFile 文件合并
+
+选出待合并的 HFile 集合以及合适的处理线程，接下来就执行合并流程，总共分为 4 步：
+
+- 分别读出待合并 HFile 文件的 KeyValue，进行归并排序处理，之后写到 ./tmp 目录下的临时文件中
+- 将临时文件移动到对应 Store 的数据目录
+- 将 Compaction 的输入文件路径和输出文件路径封装成 KV 写入 HLog 日志，并打上 Compaction 标记，最后强制执行 sync
+- 将对应 Store 数据目录下的 Compaction 输入文件全部删除
+
+HFile 合并流程具有很强的容错性和幂等性：
+
+- 如果在移动临时文件到数据目录前 RegionServer 发生异常，则后续同样的 Compaction 并不会收到影响，只是 ./tmp 目录下会多一份临时文件
+- 如果在写入 HLog 日志之前 RegionServer 发生异常，则只是 Store 对应的数据目录下多了一份数据，而不会影响真正的数据
+- 如果在删除 Store 数据目录下的 Compaction 输入文件之前 RegionServer 异常，则 RegionServer 在重新打开 Region 之后首先会从 HLog 中看到标有 Compaction 的日志，只需要根据 HLog 移除 Compaction 输入文件即可
+
+对文件进行 Compaction 操作可以提升业务读取性能，但是如果不对 Compaction 执行阶段的读写吞吐量进行限制，可能会引起短时间大量系统资源消耗，从而发生读写延迟抖动。可采用如下优化方案：
+
+Limit Compaction Speed 优化方案通过感知 Compaction 的压力情况自动调节系统的 Compaction 吞吐量：
+
+- 在正常情况下，设置吞吐量下限参数 hbase.hstore.compaction.throughput.lower.bound 和上限参数 hbase.hstore.compaction.throughput.higher.bound，实际吞吐量为 lower+(higher-lower)*ratio
+- 如果当前 Store 中 HFile 的数量太多，并且超过了参数 blockingFileCount，此时所有写请求就会被阻塞以等待 Compaction 完成
+
+Compaction 除了带来严重的 IO 消耗外，还会因为大量消耗带宽资源而严重影响业务：
+
+- 正常请求下，Compaction 尤其是 Major Compaction 会将大量数据文件合并为一个大 HFile，读出所有数据文件的 KV，重新排序后写入另一个新建的文件，如果文件不在本地则需要跨网络进行数据读取，需要消耗网络带宽
+- 数据写入文件默认都是三副本写入，不同副本位于不同节点，因此写的时候会跨网络执行，必然会消耗网络带宽
+
+Compaction BandWidth Limit 优化方案主要设计两个参数：
+
+- compactBwLimit：一次 Compaction 的最大带宽使用量，如果 Compaction 所使用的带宽高于该值，就会强制其 sleep 一段时间
+- numOfFileDisableCompactLimit：在写请求非常大的情况下，限制 Compaction 带宽必然会导致 HFile 堆积，进而会影响读请求响应延迟，因此一旦 Store 中 HFile 数据超过设定值，带宽限制就会失效
+
+### Compaction 高级策略
+
+Compaction 合并小文件，一方面提高了数据的本地化率，降低了数据读取的响应延时，另一方面也会因为大量消耗系统资源带来不同程度的短时间读取响应毛刺。HBase 提供了 Compaction 接口，可以根据自己的应用场景以及数据集订制特定的 Compaction 策略，优化 Compaction 主要从几个方面进行：
+
+- 减少参与 Compaction 的文件数，需要将文件根据 rowkey、version 或其他属性进行分割，再根据这些属性挑选部分重要的文件参与合并，并且尽量不要合并那些大文件
+- 不要合并那些不需要合并的文件，比如基本不会被查询的老数据，不进行合并也不会影响查询性能
+- 小 Region 更有利于 Compaction，大 Region 会生成大量文件，不利于 Compaction
+
+#### FIFO Compaction
+
+FIFO Compaction 策略参考了 RocksDB 的实现，它选择过期的数据文件，即该文件内的所有数据均已经过期，然后将收集到的文件删除，因此适用于此 Compaction 策略的对应列簇必须设置 TTL。
+
+FIFO Compaction 策略适用于大量短时间存储的原始数据的场景，比如推荐业务、最近日志查询等。FIFO Compaction 可以在表或者列簇上设置：
+
+```java
+Connection conn = ConnectionFactory.createConnection();
+
+HTableDescriptor desc = conn.getAdmin().getTableDescriptor(TableName.valueOf(""));
+desc.setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
+
+HColumnDescriptor colDesc = desc.getFamily("family".getBytes());
+colDesc.setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
+```
+
+#### Tier-Based Compaction
+
+在现实业务中，有很大比例的业务数据都存在明显的热点数据，最近写入的数据被访问的频率比较高，针对这种情况，HBase 提供了 Tire-Based Compaction。这种方案根据候选文件的新老程度将其分为不同的等级，每个等级都有对应的参数，比如 Compaction Ratio 表示该等级的文件的选择几率。通过引入时间等级和 Compaction Ratio 等概念，就可以更加灵活的调整 Compaction 效率。
+
+Tire-Based Compaction 方案基于时间窗的概念，当时间窗内的文件数达到 threshold (可通过参数 min_threshold 配置)时触发 Compaction 操作，时间窗内的文件将会被合并为一个大文件。基于时间窗的 Compaction 可以通过调整窗口大小来调整优先级，但是没有一个窗口时间包括所有文件，因此这个方案没有 Major Compaction 的功能，只能借助于 TTL 来清理过期文件。
+
+Tire-Based Compaction 策略适合下面的场景：
+
+- 时间序列数据，默认使用 TTL 删除，同时不会执行 delete 操作（特别适合）
+- 时间序列数据，有全局更新操作以及少部分删除操作（比较适合）
+
+#### Level Compaction
+
+Level Compaction 设计思路是将 Store 中的所有数据划分为很多层，每一层有一部分数据。
+
+数据不再按照时间先后进行组织，而是按照 KeyRange 进行组织，每个 KeyRange 进行包含多个文件，这些文件所有数据的 Key 必须分布在同一个范围。
+
+整个数据体系会被划分为很多层，最上层(Level 0)表示最新的数据，最下层(Level 6)表示最旧数据，每一层都由大量 KeyRange 块组成，KeyRnage 之间没有重合。层数越大，对应层的每个 KeyRange 块越大，下层 KeyRange 块大小是上一层的 10 倍，数据从 MemStore 中 flush 之后，会先落入 Level 0，此时落入 Level 0 的数据可能包含所有可能的 Key，此时如果需要执行 Compaction，只需要将 Level 0 中的 KV 逐个读取出来，然后按照 Key 的分布分别插入 Level 1 中对应的 KeyRange 块的文件中，如果此时刚好 Level 1 中的某个 KeyRnage 块大小超过了阈值，就会继续往下一层合并
+
+Level Compaction 中依然存在 Major Compaction 的概念，发生 Major Compaction 只需要将部分 Range 块内的文件执行合并就可以，而不需要合并整个 Region 内的数据文件。
+
+这种合并策略实现中，从上到下只需要部分文件参与，而不需要对所有文件执行 Compaction 操作。另外，对于很多“只读最近写入的数据”的业务来说，大部分读请求都会落到 Level 0，这样可以使用 SSD 作为上层 Level 存储介质，进一步优化读。但是 Level Compaction 因为层数太多导致合并的次数明显增多，对 IO 利用率并没有显著提升。
+
+#### Stripe Compaction
+
+Stripe Compaction 和 Level Compaction 原理相同，会将整个 Store 中的文件按照 key 划分为多个 Range，称为 stripe。stripe 的数量可以通过参数设定，相邻的 stripe 之间 key 不会重合。实际上从概念上看，stripe 类似于将一个大的 Region 划分成的小 Region。
+
+随着数据写入，MemStore 执行 flush 形成 HFile，这些 HFile 并不会马上写入对应的 stripe，而是放到一个称为 L0 的地方，用户可以配置 L0 放置 HFile 的数量。一旦 L0 放置的文件数超过设定值，系统会将这些 HFile 写入对应的 stripe：首先读出 HFile 的 KV，再根据 key 定位到具体的 stripe，将 KV 插入对应的 stripe 文件中。stripe 就是一个小的 Region，因此在 stripe 内部依然会有 Minor Compaction 和 Major Compaction，stripe 由于数据量并不是很大，因此 Major Compaction 并不会消耗太多资源。另外，数据读取可以根据对应的 key 查找到对应的 stripe，然后在 stripe 内部执行查找，因为 stripe 的数据量相对较小，所以也会在一定程度上提升数据查找性能。
+
+Stripe Compaction 有两种比较擅长的业务场景：
+
+- 大 Region。小 Region 没有必要切分为 stripe，一旦切分反而会带来额外的管理开销，一般默认 Region 小于 2G，就不适合使用 Stripe Compaction
+- Rowkey 具有统一格式，Stripe Compaction 要求所有数据按照 key 进行切分，生成多个 stripe，如果 rowkey 不具有统一格式，则无法切分
 
 
 
-HBase 中一张表被水平切分成多个 Region，每个 Region 负责自己区域的数据读写请求，每个 Region 包含所有列簇数据。HBase 将不同列簇的数据存储在不同的 Store 中，每个 Store 由一个 MemStore 和一系列的 HFile 组成。
 
-HBase 基于 LSM 树模型实现，所有的数据写入操作首先会顺序写入日志 HLog 再写入 MemStore，当 MemStore 中数据大小超过阈值之后再将这些数据批量写入磁盘，生成一个新的 HFile 文件。
 
-MemStore 使用跳跃表实现，即 JDK 自带的数据结构 ConcurrentSkipListMap，保证数据写入、查找、删除等操作在 O(lgN) 的时间复杂度内完成，ConcurrentSkipListMap 使用 CAS 操作保证了线程安全。
+MemStore 的 flush 操作会逐步增加磁盘上的文件数目，合并(compaction)进程会将它们合并成规模更少但是更大的文件。合并有两种类型：Minor 合并和 Major 合并。
 
-MemStore 由两个 ConcurrentSkipListMap 实现，写入操作会将数据写入到其中一个 ConcurrentSkipListMap，当数据超过阈值之后创建一个新的 ConcurrentSkipListMap 用于接收数据，之前写满的ConcurrentSkipListMap 会执行 flush 操作落盘形成 HFile
+Minor 合并负责将一些小文件合并成更大的文件，合并的最小文件数由 ```hbase.hstore.compaction.min``` 属性设置，默认值为 3，同时该值必须大于等于 2。如果设置的更大一些则可以延迟 Minor 合并的发生，但同时在合并时需要更多的资源和更长的时间。Minor 合并的最大文件数由 ```hbase.store.compaction.max``` 参数设置，默认为 10。
+可以通过设置 ```hbase.hstore.cmpaction.min.size``` 和 ```hbase.hstore.compaction.max.size``` 设置参与合并的文件的大小，在达到单次 compaction 允许的最大文件数之前小于最小阈值的文件也会参与 compaction 但是大于最大阈值的文件不会参与。
 
-#### MemStore 内存管理
-MemStore 本质是一块缓存，每个 RegionServer 由多个 Region 构成，每个 Region 根据列簇的不同包含多个 MemStore，者写 MemStore 都是共享内存的，如果 Region 上对应的 MemStore 执行 flush 操作则会使得内存空间出现较多的碎片，触发 JVM 执行 Full GC 合并这些内存碎片
-
-为了优化这种内存碎片可能导致的 Full GC，HBase 借鉴了线程本地分配缓存(Thread-Local Allocation Buffer, TLAB)的内存管理方式，通过顺序化分配内存、内存数据分块等特性使得内存碎片更加粗粒度，有效改善 Full GC，这种内存管理方式称为 MemStore 本地分配缓存(MemStore-Local Allocation Buffer, MSLAB)其具体步骤为：
-- 每个 MemStore 会实例化得到一个 MemStoreLAB 对象，MemStoreLAB 会申请一个 2M 大小的 Chunk 数组，同时维护一个 Chunk 偏移量，该偏移量的初始值为 0
-- 当一个 k-v 值插入 MemStore 后，MemStoreLAB 首先通过 KeyValue.getBuffer() 取得 data 数据，并将 data 数组复制到 Chunk 数组中，之后再将 Chunk 偏移量往前移动 data.length
-- 当 Chunk 满了之后，再调用 new byte[2*1024*1024] 申请一个新的 Chunk
-
-MSLAB 将内存碎片粗化为 2M 大小，使得 flush 之后残留的内存碎片粒度更粗，从而降低 Full GC 的触发频率。但是这种内存管理方式还存在一个问题，当 Chunk 写满之后需要创建一个新的 Chunk，新创建的 Chunk 会在新生代分配内存，如果 Chunk 申请频繁则会导致频繁的 YGC。MemStore Chunk Pool 将申请的 Chunk 循环利用而不是在 flush 之后释放掉从而避免频繁的创建新的 Chunk 降低 YGC 的频率，具体步骤为：
-- 系统创建一个 Chunk Pool 来管理所有未被引用的 Chunk 而不是被 JVM 回收
-- 如果一个 Chunk 没有再被引用则将其放入 Chunk Pool
-- 如果当前 Chunk Pool 已经达到了容量最大值，就不会接收新的 Chunk
-- 如果需要申请新的 Chunk 来存储 k-v 则首先从 Chunk Pool 中获取，如果能够获取则重复使用 Chunk，否则就重新申请一个新的 Chunk
-
-HBase 中 MSLAB 功能默认是开启的，可以通过参数 ```hbase.hregion.memstore.mslab.chunksize``` 设置 ChunkSize 的大小，默认是 2M，建议保持默认值；Chunk Pool 功能默认是关闭的，通过参数 ```hbase.hregion.memstore.chunkpool.maxsize``` 为大于 0 的值才能开启，默认是 0，该值得取值范围为 [0,1] 表示整个 MemStore 分配给 Chunk Pool 的总大小；参数 ```hbase.hregion.memstore.chunkpool.initialsize``` 取值为 [0,1] 表示初始化时申请多少个 Chunk 放到 Chunk Pool 里面，默认是 0
+Major 合并将所有的文件合成一个，这个过程是通过执行合并检查自动确定的。当 MemStore 被 flush 到磁盘、执行 compaction 或者 major_compaction 命令、调用合并相关 API都会触发检查。
 
 
 
-### StoreFile
+## In-Memory Compaction
+
+HBase 2.x 版本引入了 Segment 的概念，本质上是一个维护一个有序的 cell 列表，根据 cell 列表是否可更改，Segment 可以分为两种类型：
+
+- MutableSegment：支持添加 cell、删除 cell、扫描 cell、读取某个 cell 等操作，一般使用 ConcurrentSkipListMap 来维护
+- ImmutableSegment：只支持扫描 cell 和读取某个 cell 这种查找类操作，不支持添加、删除等写入操作，只需要一个数据维护即可
+
+HBase 还引入了 CompactingMemStore，将原来的 128M 大小的 MemStore 划分成很多个小的 Segment，其中一个 MutableSegment 和多个 ImmutableSegment。Column Family的写入操作时，先写入 MutableSegment，一旦发现 MutableSegment 占用的空间超过 2 MB，则把当前 MutableSegment 切换成 ImmutableSegment，然后初始化一个新的 MutableSegment 供后续的写入。
+
+CompactingMemStore 中的所有 ImmutableSegment 称为 pipeline，本质上是按照 ImmutableSegment 加入的顺序组成的一个 FIFO 队列。当 Column Family 发起读取或者扫描操作时，需要将这个 CompactingMemStore 的一个 MutableSegment、多个 ImmutableSegment 以及磁盘上的多个 HFile 组织成多个内部数据有序的 Scanner，然后将这些 Scanner 通过多路归并算法合并生成可以读取 Column Family 数据的 Scanner。
+
+随着数据的不断写入，ImmutableSegment 个数不断增加，需要多路归并的 Scanner 就会很多，降低读取操作的性能。所以当 ImmutableSegment 个数达到某个阈值(hbase.hregion.compacting.pipeline.segments.limit 设置，默认值 2)时，CompactingMemStore 会触发一次 InMemtory 的 MemStoreCompaction，也就是将 CompactingMemStore 的所有 ImmutableSegment 多路归并成一个 ImmutableSegment，这样 CompactingMemStore 产生的 Scanner 数量就会得到很好地控制，对杜兴能基本无影响。
+
+ImmutableSegment 的 Compaction 同样会清理掉无效的数据，包括 TTL 过期数据、超过指定版本的数据、以及标记为删除的数据，从而节省了内存空间，使得 MemStore 占用的内存增长变缓，减少 MemStore Flush 的频率。
+
+CompactingMemStore 中引入 ImmutableSegment 之后使得更多的性能优化和内存优化得到可能。ImutableSegment 需要维护的有序列表不可变，因此可以直接使用数组而不再需要使用跳跃表(ConcurrentSkipListMap)，从而节省了大量的节点开销，也避免了内存碎片。
+
+相比 DefaultMemStore，CompactingMemStore 触发 Flush 的频率会小很多，单次 Flush 操作生成的 HFile 数据量会变大，因此 HFile 数量的增长就会变慢，这样至少有三个好处：
+
+- 磁盘上 Compaction 的触发频率降低，HFile 数量少了，无论是 Minor Compaction 还是 Major Compaction 次数都会降低，这会节省很大一部分磁盘带宽和网络带宽
+- 生成的 HFile 数量变少，读取性能得到提升
+- 新写入的数据在内存中保留的时间更长，对于写完立即读的场景性能会有很大提升
+
+使用数组代替跳跃表后，每个 ImmutableSegment 仍然需要在内存中维护一个 cell 列表，其中每一个 cell 指向 MemStoreLAB 中的某一个 Chunk。可以把这个 cell 列表顺序编码在很少的几个 Chunk 中，这样 ImmutableSegment 的内存占用可以进一步减少，同时实现了零散对象“凑零为整”，进一步减少了内存的占用。
+
+可以在配置文件 hbase-site.xml 中配置集群中所有表都开启 In Memory Compaction 功能：
+
+```xml
+hbae.hregion.compacting.memstore.type=BASIC
+```
+
+也可以在创建表的时候指定开启 In Memory Compaction 功能：
+
+```shell
+create 'test', {NAME=>'cf', IN_MEMORY_COMPACTION=>'BASIC'}
+```
+
+In Memory Compaction 有三种配置值：
+
+- NONE：默认值，表示不开启 In Memory Compaction 功能，而使用 DefaultMemStore
+- BASIC：开启 In Memory Compaction 功能，但是在 ImmutableSegment 上 Compaction 的时候不会使用 ScanQueryMatcher 过滤无效数据，同时 cell 指向的内存数据不会发生任何移动
+- EAGER：开启 In Memory Compaction 功能，在 ImmutableSegment Compaction 的时候会通过 ScanQueryMatcher 过滤无效数据，并重新整理 cell 指向的内存数据，将其拷贝到一个全新的内存区域
+
+如果表中存在大流量特定行的数据更新，则使用 EAGER，否则使用 BASIC。
+
+## Region Split
+
+Region 的分裂是在 RegionServer 上独立运行的，Master 不会参与。当一个 Region 内的存储文件大于 ```hbase.hregion.max.filesize``` 时，该 Region 就需要分裂为两个

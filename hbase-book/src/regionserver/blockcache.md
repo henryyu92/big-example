@@ -1,59 +1,58 @@
 ## BlockCache
 
-HBase 设计了缓存结构 BlockCache 用以提升读性能，客户端在读取 Block 时首先检查 BlockCache 中是否存在，如果存在则直接从 BlockCache 中读取，否则从 HFile 中加载并将 Block 缓存在 BlockCache 中。
+BlockCache 是 HBase 系统中用于提升读性能的缓存，每个 RegionServer 中只包含一个 `BlockCache`。
 
-Block 是 HBase 数据读写的最小单元，即数据从 HFile 中读取都是以 Block 为最小单元执行的。
+RegionServer 查询时首先检查 `BlockCache` 中是否存在，如果存在则直接读取，否则需要从 HFile 中加载对应的 Block 并且缓存到 `BlockCache` 中。
 
-BlockCache 缓存对象是一系列 Block 块，一个 Block 默认为 64K，由物理上相邻的多个 K-V 数据组成。BlockCache 同时利用了[空间局部性]()和[时间局部性]()原理，即最近将读取的数据很可能与当前读到的数据在地址上时临近的，以及一个数据正在被访问，那么近期它还可能被再次访问。当前 BlockCache 主要有两种实现：LRUBlockCache 和 BucketCache。
+`BlockCache` 以 Block 为缓存单位，每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K。
 
-BlockCache 是 RegionServer 级别的，一个 RegionServer 只有一个 BlockCache，RegionServer 在启动的时候完成 BlocCache 的初始化：
-
-```java
-// HRegionServer 构造函数中初始化 BlockCache
-
-// no need to instantiate block cache and mob file cache when master not carry table
-if (!isMasterNotCarryTable) {
-    blockCache = BlockCacheFactory.createBlockCache(conf);
-    mobFileCache = new MobFileCache(conf);
-}
-```
-
-HBase 提供了多种 BlockCache 接口的实现类，根据不同的应用场景可以指定不同的 BlockCache 实现。
+HBase 提供了两种不同的 `BlockCache` 实现：`LruBlockCache` 和 `BucketCache`。`LruBlockCache` 缓存的所有数据都在 JVM 堆内存中；`BucketCache` 则将数据缓存在堆外，通常在文件中。
 
 ```
 思考：
-    1. BlockCache 时 RegionServer 级别，是不是粒度较大？为何不设计成 HTable 级别？
+    1. BlockCache 是 RegionServer 级别，是不是粒度较大？为何不设计成 Region 级别？
     2. 缓存淘汰、内存管理、缓存容量、缓存监控实现？
 ```
 
 ### LruBlockCache
 
-LruBlockCache 是 HBase 默认的 BlockCache 机制，将所有数据都放入 JVM 中管理。LruBlockCache 使用 ConcurrentHashMap 管理 blockKey 到 Block 的映射，查询时只需要根据 blockKey 就可以获取到对应的 Block。
+LruBlockCache 是 HBase 默认的缓存算法，将所有数据都放入 JVM 中管理。LruBlockCache 使用 ConcurrentHashMap 管理 blockKey 到 Block 的映射，查询时只需要根据 blockKey 就可以获取到对应的 Block。
 
-LruBlockCache 
+LruBlockCache 使用三级缓存机制，：
 
-#### 写缓存
+- `Single access priority`：Block 从 HDFS 加载时拥有的优先级，在 Block 进行 LRU 策略移除时优先移除此优先级的 Block，`Single` 级别的缓存占缓存总量的 25%
+- `Multi access priority`：访问 `Single access priority` 中的 Block 时，则调整 Block 到当前优先级，`Multi` 级别的缓存占缓存总量的 50%
+- `In-Memory access priority`：如果列簇设置为 `in-memory` ，则不管 Block 访问了多少次都会设置为当前优先级，在缓存根据 LRU 策略移除 Block 时此优先级的 Block 最后被移除，`In-Memory` 级别的缓存占缓存总量的 25%
 
-LruBlockCache 使用三级缓存机制，即存储缓存的数据分为三个等级：single, multi 和 memory。Block 在存入 LruCacheBlock 前会包装成 LruCachedBlock，LruCachedBlock 在创建的时候会根据 imMemory 参数来设置优先级，如果为 true 则表示需要常驻内存，优先级为 ```BlockPriority.MEMORY```，否则为 ```BlockPriority.SINGLE```。
-
-```java
+HRegion 在启动时默任启用了 `LruBlockCache`，缓存的总量由参数 `hfile.block.cache.size`  设置，表示占堆内存的比例，默认是 40%。
 
 ```
 
+```
 
-#### 读缓存
+`LruBlockCache` 中存储的 Block 从 HFile 中加载，因此除了缓存 `Data Block` 之外还会存储其他的信息：
 
-#### 缓存淘汰
+- `hbase:meta` 和 `hbase:namespace` 等元数据信息强制存储在 BlockCache 中，并且默认是 `In-Memory` 级别
+- `Index Block` 是 HFile 中的索引信息，利用索引信息可以不加载整个 HFile 而读取到数据 
+- `Bloom Block`  是块的布隆过滤器信息，可以快速判断查找的数据是否不在当前块
+
+`LruBlockCache` 使用堆内存作为缓存，频繁的触发 lru 淘汰策略移除缓存的 Block 会导致大量的垃圾回收，因此对于特定的应用场景需要关闭缓存功能：
+
+- 完全随即读取，这种情况下缓存的命中率几乎为 0
+
+`BlockCache` 总是会缓存 `Index Block` 和 `Bloom Block`，因此在访问随即数据时可以只缓存元数据信息而不缓存数据，此时只需要在创建表的时候禁用列簇的 BlockCache 功能：
+
+```java
+ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
+```
 
 
-
-LruBlockCache 使用三级缓存机制，将整个 BlockCache 分为三部分：single、multi、in-memory，分别占到 25%, 50%, 25%。Block 从 HFile 中加载出来后放入 single，如果后续有多个请求访问到这个 Block，则将该 Block 移到 multi，in-memory 区表示数据可以常驻内存。in-memory 区用于存放访问频繁、量小的数据，比如元数据。在建表的时候设置列簇属性 IN_MEMORY=true 之后该列簇的 Block 在磁盘中加载出来后会直接放入 in-memory 区，但是数据写入时并不会写入 in-memory 区，而是和其他 BlockCache 区一样，只有在加载的时候才会放入，进入 in-memory 区的 Block 并不意味着一直存在于该区域，在空间不足的情况下依然会基于 LRU 淘汰算法淘汰最近不活跃的一些 Block。HBase 元数据(hbase:meta, hbase:namespace 等)都存放在 in-memory 区，因此对于很多业务表来说，设置数据属性 IN_MEMEORY=ture 时需要注意可能会由于空间不足而导致 hbase:meta 等元数据被淘汰，从而会严重影响业务性能
-
-LruBlockCache 使用 LRU 算法淘汰数据，当 BlockCache 中 Block 总量达到阈值之后就会自动启动淘汰机制，最近最少使用的 Block 就会被淘汰。LruBlockCache 每次将数据放入 Map 后都会检查 BlockCache 容量是否到达阈值，如果到达阈值则会唤醒淘汰线程对 Map 中的 Block 进行淘汰，BlockCache 设置了 3 个 MinMaxPriorityQueue 分别对应缓存的三层，每个队列中的元素按照最近最少使用原则释放 Block 的内存。
-
-LruBlockCache 使用堆内存作为缓存，当 Block 长时间在缓存中存活后被淘汰，此时会有触发 Full GC 的风险。
 
 ### BucketCache
+
+`BucketCache` 通常和 `LruBlockCache` 共同作用，并且由 `CombinedBlockCache` 管理。
+
+
 
 BucketCache 通过不同配置方式可以工作在三种模式下：heap, offheap, file。其中 heap 模式表示 Bucket 是从堆内存中分配的，offheap 模式表示 Bucket 是从直接内存中分配的，file 模式表示使用存储介质来缓存 Block。
 
@@ -150,4 +149,3 @@ file 模式的配置：
 </property>
 ```
 
-### CombinedBlockCache
