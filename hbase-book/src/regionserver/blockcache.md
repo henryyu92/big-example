@@ -64,6 +64,11 @@ ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
 <!-- 配置用于启用 CombinedBlockCache -->
 <property>
   <name>hbase.bucketcache.ioengine</name>
+  <!-- file 模式 -->
+  <value>files:PATH_TO_FILE1,PATH_TO_FILE2</value>
+  <!-- heap 模式 -->
+  <value>mmap:PATH_TO_FILE</value>
+  <!-- offheap 模式 -->
   <value>offheap</value>
 </property>
 <property>
