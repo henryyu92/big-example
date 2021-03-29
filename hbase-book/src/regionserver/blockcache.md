@@ -50,11 +50,36 @@ ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
 
 ### BucketCache
 
-`BucketCache` 通常和 `LruBlockCache` 共同作用，并且由 `CombinedBlockCache` 管理。
+`BucketCache` 通常和 `LruBlockCache` 共同作用，并且由 `CombinedBlockCache` 管理，其工作方式是将 `Index Block` 和 `Bloom Block` 缓存在 `LruBlockCache` ，而将 `Data Block` 缓存在 `BucketCache`。
+
+ `BucketCache` 通过不同配置方式可以工作在三种模式下：
+
+- `offheap`：Bucket 是从直接内存中分配的
+-  `file`：使用存储介质来缓存 Block
+- `mmaped file`： Bucket 是从堆内存中分配的
+
+通过设置参数 `hbase.bucketcache.ioengine` 可以配置 `BucketCache` 在三种模式之间切换：
+
+```xml
+<!-- 配置用于启用 CombinedBlockCache -->
+<property>
+  <name>hbase.bucketcache.ioengine</name>
+  <value>offheap</value>
+</property>
+<property>
+  <name>hfile.block.cache.size</name>
+  <value>0.2</value>
+</property>
+<!-- 配置 BucketCache 的大小 -->
+<property>
+  <name>hbase.bucketcache.size</name>
+  <value>4196</value>
+</property>
+```
 
 
 
-BucketCache 通过不同配置方式可以工作在三种模式下：heap, offheap, file。其中 heap 模式表示 Bucket 是从堆内存中分配的，offheap 模式表示 Bucket 是从直接内存中分配的，file 模式表示使用存储介质来缓存 Block。
+
 
 BucketCache 是以 Bucket 为单位的，BucketCache 会申请多种固定大小的 Bucket，每种 Bucket 一种指定 blockSize 的 Block。
 
@@ -148,4 +173,6 @@ file 模式的配置：
     <value>file:/cache_path</value>
 </property>
 ```
+
+### BlockCache 压缩
 
