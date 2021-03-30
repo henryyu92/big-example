@@ -19,9 +19,11 @@ MemStore 使用跳跃表结构保证在有序的情况下保证查询、插入�
 - `MemStoreChunkPool` 在处理 Chunk 申请时首先确定是否有空闲的 Chunk，有则直接返回空闲的 Chunk，否则创建新的 Chunk 返回
 - `Chunk` 没有被使用时并不会被 JVM 回收，而是由 `MemStoreChunkPool` 管理
 
-#### In-Memory Compaction
+### CompactingMemStore
 
-`ConcurrentSkipList` 结构并不是内存友好的，其每个节点除了数据对象外，还包含过多的索引对象占用了额外内存。为了减少额外的内存占用，HBase 引入了 In-Memory 机制，其核心原理是将 MemStore 分成可变的 `MutalbeSegment` 和不可变的 `ImmutableSegment`，并且将不可变的 `ImmutableSegment` 中的 `ConcurrentSkipList` 结构转换成内存友好的 `CellArrayInmuutableSegment` 或者 `CellImmutableSegment`。
+`ConcurrentSkipList` 结构并不是内存友好的，其每个节点除了数据对象外，还包含过多的索引对象占用了额外内存。
+
+HBase 引入了 In-Memory 机制来减少额外的内存占用，其核心原理是将 MemStore 分成可变的 `MutalbeSegment` 和不可变的 `ImmutableSegment`，并且将不可变的 `ImmutableSegment` 中的 `ConcurrentSkipList` 结构转换成内存友好的 `CellArrayInmuutableSegment` 或者 `CellImmutableSegment`。
 
 In-Memory Compaction 机制是通过 `CompactingMemStore` 完成，
 
