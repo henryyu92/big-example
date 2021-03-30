@@ -61,14 +61,6 @@ HBase 会在以下集中情况触发 flush 操作：
 - RegionServer 级别限制：当 RegionServer 中 MemStore 的大小总和超过低水位阈值 hbase.regionserver.global.memstore.size.lower.limit * hbase.regionserver.global.memstore.size，RegionServer 开始强制执行 flush，先 flush MemStore 最大的 Region，在 flush 次大的，依次执行。如果此时写入吞吐量依然很高，导致总 MemStore 大小超过高水位阈值 hbase.regionserver.global.memstore.size，RegionServer 会阻塞更新并强制执行 flush，直到总 MemStore 大小下降到低水位阈值
 - 当一个 RegionServer 中 HLog 数量达到上限(hbase.regionserver.maxlogs)时，系统会选取最早的 HLog 对应的一个或多个 Region 进行 flush
 - HBase 定期刷新 MemStore：默认周期为 1 小时，以确保 MemStore 不会长时间没有持久化。为避免所有的 MemStore 在同一时间都进行 flush 操作而导致的问题，定期 flush 操作有一定时间的随机延迟
-- 手动执行 flush：通过 shell 命令 flush 'tablename' 或者 flush 'regionname' 分别对一个表或者一个 Region 进行 flush
-
-HBase 采用了类似于二阶段提交的方式将整个 flush 过程分为了三个阶段：
-- prepare 阶段：遍历当前 Region 中所有 MemStore，将 MemStore 中当前数据集 CellSkipListSet(采用 ConcurrentSkipListMap) 做一个快照 snapshot，然后再新建一个 CellSkipListMap 接收新的数据写入。prepare 阶段需要添加 updateLock 对写请求阻塞，结束之后会释放该锁，持锁时间很短
-- flush 阶段：遍历所有 MemStore，将 prepare 阶段生成的 snapshot 持久化为临时文件，放入目录 .tmp 下，这个过程涉及到磁盘 IO，因此比较耗时
-- commit 阶段：遍历所有的 MemStore，将 flush 阶段生成的临时文件移到指定的 ColumFamily 目录下，针对 HFile 生成对应的 storefile 和 Reader，把 storefile 添加到 Store 的 storefile 列表中，最后再清空 prepare 阶段生成的 snapshot
-
-HBase 执行 flush 操作后将内存中的数据按照特定格式写入 HFile 文件。MemStore 中 KV 在 flush 成 HFile 时首先构建 Scanned Block 部分，即 KV 写入之后首先构建 Data Block 并依次写入文件，形成 Data Block 的过程中也会依次构建形成 Leaf index Block、Bloom Block 并依次写入文件。一旦 MemStore 中所有 KV 都写入完成，Scanned Block 部分就构建完成。
 
 #### 构建 Scanned Block
 MemStore 中 KV 数据写入 HFile 分为 4 个步骤：

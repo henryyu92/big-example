@@ -1,5 +1,9 @@
 ## Region
 
+
+
+
+
 Region 是 Table 的可用性和分布式的最基本元素，Region 由每个列族的 Store 组成；通常 Habse 每个服务器上运行这比较少的 Region（20-200），但每个 Region 保存比较大的数据(5-20Gb)
 
 
@@ -11,7 +15,7 @@ Region 是 Table 的可用性和分布式的最基本元素，Region 由每个�
 
 Region 中的数据是以 LSM 树的形式存放，LSM 树的索引分为两部分：内存部分和磁盘部分。在 Region 中内存部分就是 MemStore，而磁盘部分就是 StoreFile。
 
-## Region Compaction
+### Region 合并
 
 HFile 小文件如果数量太多会导致读取效率低，为了提高读取效率，LSM 树体系架构设计了 Compaction，Compaction 的核心功能是将小文件合并成大文件，提高读取效率。
 
@@ -32,7 +36,7 @@ Compaction 在执行过程中有个比较明显的副作用：Compaction 操作�
 
 HBase 中 Compaction 只有在特定的触发条件才会执行，一旦触发就会按照特定的流程执行 Compaction。HBase 会将该 Compaction 交由一个独立的线程处理，该线程首先会从对应 Store 中选择合适的 HFile 文件进行合并，选取文件有多种算法，如：RatioBasedCompactionPolicy、ExploringCompactionPolocy 和 StripeCompactionPolicy 等，也可以自定义实现 Compaction 接口实现自定义的策略，挑选出合适的文件后，HBase 会根据这些 HFile 总大小挑选对应的线程池处理，最后对这些文件执行具体的合并操作。
 
-### Compaction 触发时机
+#### 触发时机
 
 HBase 中触发 Compaction 的时机很多，最常见的有三种：
 
@@ -40,7 +44,7 @@ HBase 中触发 Compaction 的时机很多，最常见的有三种：
 - 后台线程周期性检查：RegionServer 在启动时在后台启动一个 CompactionChecker 线程，用于定期触发检查对应 Store 是否需要执行 Compaction，检查周期为 hbase.server.thread.wakefrequency * hbase.server.compactchecker.interval.multiplier。和 flush 不同的是，该线程优先检查 Store 中总文件数是否大于阈值 hbase.hstore.compactionThreshold，一旦大于就会触发 Compaction；如果不满足，接着检查是否满足 MajorCompaction 条件，如果当前 Store 中 HFile 的最早更新时间早于某个值(hbase.hregion.majorcompaction*(1+hbase.hregion.majorcompaction.jitter))，默认是 7 天
 - 手动触发：手动触发 Compaction 大多是为了执行 Major Compaction，Major Compaction 会比较大的影响业务性能且可以删除无效数据，可以在需要的时候手动触发 Major Compaction
 
-### HFile 集合选择策略
+#### HFile 选择
 
 选择合适的文件进行合并是整个 Compaction 的核心，因为合并文件的大小及其当前承载的 IO 数直接决定了 Compaction 的效果以及对整个系统业务的影响程度。
 
@@ -57,7 +61,7 @@ HBase 提供的选择策略会首先对该 Store 中所有 HFile 逐一进行排
 
 如果满足 Major Compaction 则待合并的 HFile 就是 Store 中所有的 HFile，如果不满足则 HBase 需要继续采用文件选择策略选择合适的 HFile。HBase 主要有两种文件选择策略：RatioBasedCompactionPolicy 和 ExploringCompactionPolicy
 
-#### RatioBasedCompactionPolicy
+##### RatioBasedCompactionPolicy
 
 从老到新逐一扫描所有候选文件，满足任意一个条件就停止扫描：
 
@@ -66,11 +70,11 @@ HBase 提供的选择策略会首先对该 Store 中所有 HFile 逐一进行排
 
 停止扫描后，待合并的文件就是当前扫描文件以及比它更新的所有文件
 
-#### ExploringCompactionPolicy
+##### ExploringCompactionPolicy
 
 Exploring 策略会记录所有合适的文件结合，并在这些文件集合中寻找最优解，即待合并文件数最多或者待合并文件数相同的情况下文件较小
 
-### 挑选合适的执行线程池
+#### 挑选合适的执行线程池
 
 选择出了待合并的文件集合之后，需要挑选出合适的处理线程来进行正真的合并操作。HBase 实现了一个专门的类 CompactSplitThread 负责接收 Compaction 请求和 split 请求，为了能够独立处理这些请求，这个类内部构造了多个线程池：
 
@@ -78,7 +82,7 @@ Exploring 策略会记录所有合适的文件结合，并在这些文件集合�
 - shortCompactions：处理小 Compaction
 - splits：负责处理所有的 split 请求
 
-### HFile 文件合并
+#### HFile 文件合并
 
 选出待合并的 HFile 集合以及合适的处理线程，接下来就执行合并流程，总共分为 4 步：
 
@@ -110,7 +114,7 @@ Compaction BandWidth Limit 优化方案主要设计两个参数：
 - compactBwLimit：一次 Compaction 的最大带宽使用量，如果 Compaction 所使用的带宽高于该值，就会强制其 sleep 一段时间
 - numOfFileDisableCompactLimit：在写请求非常大的情况下，限制 Compaction 带宽必然会导致 HFile 堆积，进而会影响读请求响应延迟，因此一旦 Store 中 HFile 数据超过设定值，带宽限制就会失效
 
-### Compaction 高级策略
+#### Compaction 高级策略
 
 Compaction 合并小文件，一方面提高了数据的本地化率，降低了数据读取的响应延时，另一方面也会因为大量消耗系统资源带来不同程度的短时间读取响应毛刺。HBase 提供了 Compaction 接口，可以根据自己的应用场景以及数据集订制特定的 Compaction 策略，优化 Compaction 主要从几个方面进行：
 
@@ -118,7 +122,7 @@ Compaction 合并小文件，一方面提高了数据的本地化率，降低了
 - 不要合并那些不需要合并的文件，比如基本不会被查询的老数据，不进行合并也不会影响查询性能
 - 小 Region 更有利于 Compaction，大 Region 会生成大量文件，不利于 Compaction
 
-#### FIFO Compaction
+##### FIFO Compaction
 
 FIFO Compaction 策略参考了 RocksDB 的实现，它选择过期的数据文件，即该文件内的所有数据均已经过期，然后将收集到的文件删除，因此适用于此 Compaction 策略的对应列簇必须设置 TTL。
 
@@ -134,7 +138,7 @@ HColumnDescriptor colDesc = desc.getFamily("family".getBytes());
 colDesc.setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
 ```
 
-#### Tier-Based Compaction
+##### Tier-Based Compaction
 
 在现实业务中，有很大比例的业务数据都存在明显的热点数据，最近写入的数据被访问的频率比较高，针对这种情况，HBase 提供了 Tire-Based Compaction。这种方案根据候选文件的新老程度将其分为不同的等级，每个等级都有对应的参数，比如 Compaction Ratio 表示该等级的文件的选择几率。通过引入时间等级和 Compaction Ratio 等概念，就可以更加灵活的调整 Compaction 效率。
 
@@ -145,7 +149,7 @@ Tire-Based Compaction 策略适合下面的场景：
 - 时间序列数据，默认使用 TTL 删除，同时不会执行 delete 操作（特别适合）
 - 时间序列数据，有全局更新操作以及少部分删除操作（比较适合）
 
-#### Level Compaction
+##### Level Compaction
 
 Level Compaction 设计思路是将 Store 中的所有数据划分为很多层，每一层有一部分数据。
 
@@ -157,7 +161,7 @@ Level Compaction 中依然存在 Major Compaction 的概念，发生 Major Compa
 
 这种合并策略实现中，从上到下只需要部分文件参与，而不需要对所有文件执行 Compaction 操作。另外，对于很多“只读最近写入的数据”的业务来说，大部分读请求都会落到 Level 0，这样可以使用 SSD 作为上层 Level 存储介质，进一步优化读。但是 Level Compaction 因为层数太多导致合并的次数明显增多，对 IO 利用率并没有显著提升。
 
-#### Stripe Compaction
+##### Stripe Compaction
 
 Stripe Compaction 和 Level Compaction 原理相同，会将整个 Store 中的文件按照 key 划分为多个 Range，称为 stripe。stripe 的数量可以通过参数设定，相邻的 stripe 之间 key 不会重合。实际上从概念上看，stripe 类似于将一个大的 Region 划分成的小 Region。
 
@@ -179,53 +183,113 @@ Minor 合并负责将一些小文件合并成更大的文件，合并的最小�
 
 Major 合并将所有的文件合成一个，这个过程是通过执行合并检查自动确定的。当 MemStore 被 flush 到磁盘、执行 compaction 或者 major_compaction 命令、调用合并相关 API都会触发检查。
 
+### Region 分裂
 
+Compaction 之后 Region 内的小文件会合并成大文件，满足分裂策略的条件后就会触发 Region 分裂。
 
-## In-Memory Compaction
+#### 分裂策略
 
-HBase 2.x 版本引入了 Segment 的概念，本质上是一个维护一个有序的 cell 列表，根据 cell 列表是否可更改，Segment 可以分为两种类型：
+HBase 定义不同的分裂策略，不同的分裂策略有不同的应用场景
 
-- MutableSegment：支持添加 cell、删除 cell、扫描 cell、读取某个 cell 等操作，一般使用 ConcurrentSkipListMap 来维护
-- ImmutableSegment：只支持扫描 cell 和读取某个 cell 这种查找类操作，不支持添加、删除等写入操作，只需要一个数据维护即可
+- `ConstantSizeRegionSplitPolicy`：表示一个 Region 中最大 Store 的大小超过设置阈值(hbase.hregion.max.filesize)之后触发分裂。这种策略实现简单，但是对于大表和小表没有明显的区分，阈值设置较大则对大表比较友好，而小表可能不会分裂，极端情况下只有一个 Region，这对 RegionServer 压力比较大；如果阈值设置的比较小，则大表会在集群中产生大量的 Region，这对集群的管理来说增加了负担
+- `IncreasingToUpperBoundRegionSplitPolicy`：这种策略也是在一个 Region 中最大的 Store 大小超过阈值之后触发分裂，但是这种策略的阈值并不是固定的，而是和 Region 所属表在的 RegionServer 上的 Region 数量有关，其值为 ```regions * regions * regions * flushsize * 2```，这个值得上限为 MaxRegionFileSize，这种策略会使得很多小表就会产生大量小的 Region
+- `SteppingSplitPolicy`：这种策略的分裂阈值大小和待分裂 Region 所属表当前 RegionServer 上的 Region 个数有关，如果 Region 个数为 1，分裂阈值为 flushsize * 2，否则为 MaxRegionFileSize，这种策略不会使得小表再产生大量的小 Region
 
-HBase 还引入了 CompactingMemStore，将原来的 128M 大小的 MemStore 划分成很多个小的 Segment，其中一个 MutableSegment 和多个 ImmutableSegment。Column Family的写入操作时，先写入 MutableSegment，一旦发现 MutableSegment 占用的空间超过 2 MB，则把当前 MutableSegment 切换成 ImmutableSegment，然后初始化一个新的 MutableSegment 供后续的写入。
+在创建表时指定不同的分裂策略
 
-CompactingMemStore 中的所有 ImmutableSegment 称为 pipeline，本质上是按照 ImmutableSegment 加入的顺序组成的一个 FIFO 队列。当 Column Family 发起读取或者扫描操作时，需要将这个 CompactingMemStore 的一个 MutableSegment、多个 ImmutableSegment 以及磁盘上的多个 HFile 组织成多个内部数据有序的 Scanner，然后将这些 Scanner 通过多路归并算法合并生成可以读取 Column Family 数据的 Scanner。
-
-随着数据的不断写入，ImmutableSegment 个数不断增加，需要多路归并的 Scanner 就会很多，降低读取操作的性能。所以当 ImmutableSegment 个数达到某个阈值(hbase.hregion.compacting.pipeline.segments.limit 设置，默认值 2)时，CompactingMemStore 会触发一次 InMemtory 的 MemStoreCompaction，也就是将 CompactingMemStore 的所有 ImmutableSegment 多路归并成一个 ImmutableSegment，这样 CompactingMemStore 产生的 Scanner 数量就会得到很好地控制，对杜兴能基本无影响。
-
-ImmutableSegment 的 Compaction 同样会清理掉无效的数据，包括 TTL 过期数据、超过指定版本的数据、以及标记为删除的数据，从而节省了内存空间，使得 MemStore 占用的内存增长变缓，减少 MemStore Flush 的频率。
-
-CompactingMemStore 中引入 ImmutableSegment 之后使得更多的性能优化和内存优化得到可能。ImutableSegment 需要维护的有序列表不可变，因此可以直接使用数组而不再需要使用跳跃表(ConcurrentSkipListMap)，从而节省了大量的节点开销，也避免了内存碎片。
-
-相比 DefaultMemStore，CompactingMemStore 触发 Flush 的频率会小很多，单次 Flush 操作生成的 HFile 数据量会变大，因此 HFile 数量的增长就会变慢，这样至少有三个好处：
-
-- 磁盘上 Compaction 的触发频率降低，HFile 数量少了，无论是 Minor Compaction 还是 Major Compaction 次数都会降低，这会节省很大一部分磁盘带宽和网络带宽
-- 生成的 HFile 数量变少，读取性能得到提升
-- 新写入的数据在内存中保留的时间更长，对于写完立即读的场景性能会有很大提升
-
-使用数组代替跳跃表后，每个 ImmutableSegment 仍然需要在内存中维护一个 cell 列表，其中每一个 cell 指向 MemStoreLAB 中的某一个 Chunk。可以把这个 cell 列表顺序编码在很少的几个 Chunk 中，这样 ImmutableSegment 的内存占用可以进一步减少，同时实现了零散对象“凑零为整”，进一步减少了内存的占用。
-
-可以在配置文件 hbase-site.xml 中配置集群中所有表都开启 In Memory Compaction 功能：
-
-```xml
-hbae.hregion.compacting.memstore.type=BASIC
+```java
+TableDescriptorBuilder.setRegionSplitPolicyClassName(class_name);
 ```
 
-也可以在创建表的时候指定开启 In Memory Compaction 功能：
+#### 分裂点
+
+Region 触发分裂之后首先需要找到分裂点，除了手动执行分裂可以指定分裂点之外，Region 的分裂点定义为：**Region 中最大 Store 的最大文件最中心的一个 Block 的首个 rowkey，如果 rowkey 是整个文件的首个 rowkey 或最后一个 rowkey 时则没有分裂点，此时整个 Region 中只有一个 block**。
+
+#### 分裂流程
+
+![Region 分裂](../img/region-split.png)
+
+Region 的分裂是在一个事务当中，整个分裂过程分为三个阶段：
+
+- prepare 阶段：在内存中初始化两个子 Region，每个 Region 对应一个 HRegionInfo 对象，同时会生成一个 transaction journal 对象用来记录分裂的进程
+- execute 阶段：execute 阶段是整个分裂过程的核心阶段，总共有 8 个步骤：
+  - RegionServer 将 ZK 节点 /region-in-transaction 中该结点的状态更改为 SPLITING
+  - Master 通过 watch 节点 /region-in-transaction 检测到 Region 状态改变，并修改内存中 Region 的状态，在 Master 页面 RIT 模块可以看到 Region 执行 split 的状态信息
+  - 在父存储目录下新建临时文件夹 .split，保存 split 后的 daughter region 信息
+  - 关闭父 Region，父 Region 关闭数据写入并触发 flush 操作，将写入 Region 的数据全部持久化到磁盘，此后短时间内客户端落在父 Region 上的请求都会抛出 NotServingRegionException
+  - 在 .split 文件夹下新建两个子文件夹，称为 daughter A，daughter B，并在文件夹中生成 reference 文件，分别指向父 Region 中对应文件。reference 文件是一个引用文件，文件内容并不是用户数据，而是由两部分组成：分裂点 splitkey 和 boolean 类型的变量表示该 reference 文件引用的是父文件的上半部分(true)或者下半部分(false)，使用 hadoop 命令 ```hadoop dfs -cat /hbase-rsgroup/data/default/...``` 可以查看 reference 文件内容
+  - 父 Region 分裂为两个子 Region 后，将 daughter A、daughter B 拷贝到 HBase 根目录下，形成两个新的 Region
+  - 父 Region 通知修改 hbase:meta 表后下线，不再提供服务。下线后父 Region 在 meta 表中的信息并不会马上删除，而是将 meta 表中的 split 列、offline 列标注为 true，并记录两个子 Region
+  - 开启 daughter A、daughter B 两个子 Region。通知修改 hbase:meta 表正式对外提供服务
+- rollback 阶段：如果 execute 阶段出现异常，则执行 rollback 操作。为了实现回滚，整个分裂过程分为很多子阶段，回滚程序会根据当前进展到哪个子阶段清理对应的垃圾数据，整个分裂的过程的阶段由 RegionMergeTransactionPhase 类定义
+
+Region 分裂是一个比较复杂的过程，涉及到父 Region 中 HFile 文件分裂，子 Region 生成，meta 元数据更新等很多个子步骤，为了实现原子性，HBase 使用状态机的方式保存分裂过程中的每个子步骤状态，这样一旦出现异常，系统可以根据当前所处的状态决定是否回滚，以及如何回滚。目前这些中间状态都只存储在内存中，一旦在分裂过程中出现 RegionServer 宕机的情况则有可能出现分裂处于中间状态的情况，即 RIT 状态，这种情况下需要使用 HBCK 工具查看并分析解决方案。
+
+在 2.0 版本之后，HBase 实现了新的分布式事务框架 Procedure V2，新框架使用类似 HLog 的日志文件存储这种单机事务的中间状态，因此可以保证即使在事务执行过程中参与者发生了宕机，依然可以使用对应日志文件作为协调者，对事务进行回滚操作或者重试提交，从而大大减少甚至杜绝 RIT 现象。
+
+通过 reference 文件查找数据分为两步：
+
+- 根据 reference 文件名(父 Region 名 + HFile 文件名)定位到真实数据所在文件路径
+- 根据 reference 文件内容记录的两个重要字段确定实际扫描范围，top 字段表示扫描范围是 HFile 上半部分还是下半部分，如果 top 为 true 则表示扫描的范围为 [firstkey, splitkey)，如果 top 为 false 则表示扫描的范围为 [splitkey, endkey)
+
+父 Region 的数据迁移到子 Region 目录的时间发生在子 Region 执行 Major Compaction 时，在子 Region 执行 Major Compaction 时会将父 Region 目录中属于该子 Region 中所有的数据读取出来，并写入子 Region 目录数据文件中。
+
+Master 会启动一个线程定期遍历检查所处于 splitting 状态的 Region，确定父 Region 是否可以被清理，检查过程分为两步：
+
+- 检测线程首先会在 meta 表中读出所有 spit 列为 true 的 Region，并加载出其分裂后生成的两个子 Region(meta 表中 splitA 和 splitB 两列)
+- 检查两个子 Region 是否还存在引用文件，如果都不存在引用文件就可以认为该父 Region 对应的文件可以被删除
+
+HBCK 可以查看并修复在 split 过程中发生异常导致 region-in-transaction 问题，主要命令包括：
 
 ```shell
-create 'test', {NAME=>'cf', IN_MEMORY_COMPACTION=>'BASIC'}
+-fixSplitParents
+-removeParents
+-fixReferenceFiles
 ```
 
-In Memory Compaction 有三种配置值：
 
-- NONE：默认值，表示不开启 In Memory Compaction 功能，而使用 DefaultMemStore
-- BASIC：开启 In Memory Compaction 功能，但是在 ImmutableSegment 上 Compaction 的时候不会使用 ScanQueryMatcher 过滤无效数据，同时 cell 指向的内存数据不会发生任何移动
-- EAGER：开启 In Memory Compaction 功能，在 ImmutableSegment Compaction 的时候会通过 ScanQueryMatcher 过滤无效数据，并重新整理 cell 指向的内存数据，将其拷贝到一个全新的内存区域
 
-如果表中存在大流量特定行的数据更新，则使用 EAGER，否则使用 BASIC。
+### Region 迁移
 
-## Region Split
+HBase 的集群负载均衡、故障恢复功能都是建立在 Region 迁移的基础之上，HBase 由于数据实际存储在 HDFS 上，在迁移过程中不需要迁移实际数据而只需要迁移读写服务即可，因此 HBase 的 Region 迁移是非常轻量级的。
 
-Region 的分裂是在 RegionServer 上独立运行的，Master 不会参与。当一个 Region 内的存储文件大于 ```hbase.hregion.max.filesize``` 时，该 Region 就需要分裂为两个
+Region 迁移虽然是一个轻量级操作，但是实现逻辑依然比较复杂，其复杂性在于两个方面：
+
+- Region 迁移过程中设计多种状态的改变
+- Region 迁移过程中设计 Master，ZK 和 RegionServer 等多个组件的互相协调
+
+Region 迁移的过程分为 unassign 和 assign 两个阶段
+
+#### unassign
+
+unassign 阶段是 Region 从 RegionServer 下线，总共涉及 4 个状态变化
+
+- Master 生成事件 M_ZK_REGION_CLOSING 并更新到 ZK 组件，同时将本地内存中该 Region 的状态修改为 PENDING_CLOSE
+- Master 通过 RPC 发送 close 命令给拥有该 Region 的 RegionServer，令其关闭该 Region
+- RegionServer 接收到 Master 发送过来的命令后，生成一个 RS_ZK_REGION_CLOSING 事件，更新到 ZK
+- Master 监听到 ZK 节点变动后，更新内存中 Region 的状态为 CLOSING
+- RegionServer 执行 Region 关闭操作。如果该 Region 正在执行 flush 或者 Compaction，则等待其完成；否则将该 Region 下的所有 MemStore 强制 flush，然后关闭 Region 相关服务
+- RegionServer 执行完 Region 关闭操作后生成事件 RS_ZK_REGION_CLOSED 更新到 ZK，Master 监听到 ZK 节点变化后，更新该 Region 的状态为 CLOSED
+
+#### assign
+
+assign 阶段是 Region 从目标 RegionServer 上线，也会涉及到 4 个状态变化
+
+- Master 生成事件 M_ZK_REGION_OFFLINE 并更新到 ZK 组件，同时将本地内存中该 Region 的状态修改为 PENDING_OPEN
+- Master 通过 RPC 发送 open 命令给拥有该 Region 的 RegionServer，令其打开 Region
+- RegionServer 接收到命令之后，生成一个 RS_ZK_REGION_OPENING 事件，并更新到 ZK
+- Master 监听到 ZK 节点变化后，更新内存中 Region 的状态为 OPENING
+- RegionServer 执行 Region 打开操作，初始化相应的服务
+- 打开完成之后生成事件 RS_ZK_REGION_OPENED 并更新到 ZK，Master 监听到 ZK 节点变化后，更新该 Region 状态为 OPEN
+
+整个 unassign 和 assign 过程涉及 Master、RegionServer 和 ZK 三个组件，三个组件的职责如下：
+
+- Master 负责维护 Region 在整个过程中的状态变化
+- RegionServer 负责接收 Master 的指令执行具体 unassign 和 assign 操作，即关闭 Region 和打开 Region 的操作
+- ZK 负责存储操作过程中的事件，ZK 有一个路径为 /hbase/region-in-transaction 节点，一旦 Region 发生 unassign 操作，就会在这个节点下生成一个子节点，Master 会监听此节点，一旦发生任何事件，Master 会监听到并更新 Region 的状态
+
+Region 在迁移的过程中涉及到多个状态的变化，这些状态可以记录 unassign 和 assign 的进度，在发生异常时可以根据具体进度继续执行。Region 的状态会存储在三个区域：
+
+- meta 表，只存储 Region 所在的 RegionServer，并不存储迁移过程中的中间状态，如果 Region 迁移完成则会更新为新的对应关系，如果迁移过程失败则保存的是之前的映射关系
+- master 内存，存储整个集群所有的 Region 信息，根据这个信息可以得出此 Region 当前以什么状态在哪个 RegionServer 上。Master 存储的 Region 状态变更都是由 RegionServer 通过 ZK 通知给 Master 的，所以 Master 上的 Region 状态变更总是滞后于真正的 Region 状态变更，而 WebUI 上看到的 Region 状态都是来自于 Master 的内存信息
+- ZK，存储的是临时性的状态转移信息，作为 Master 和 RegionServer 之间反馈 Region 状态的通信，Master 可以根据 ZK 上存储的状态作为依据据需进行迁移操作
