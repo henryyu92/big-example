@@ -1,95 +1,83 @@
 ## Region
 
+Region 是 Table 的可用性和分布式的最基本元素，Region 由和表列簇相等个数的 Store 组成，写入的数据最终会形成多个 HFile 文件存储在 HDFS。
 
+HFile 文件数量过多会严重影响 HBase 的读性能，RegionServer 在后台运行着检测线程，当满足条件时就会触发 Region Compaction 操作。
 
+Region 随着数据的写入会越来越大不利于集群的负载均衡，当 Region 的大小达到 Region 分裂策略的阈值时就会触发 Region 分裂。
 
+集群在负载不均衡或者 RegionServer 故障时需要将 Region 重新迁移到合适的节点。
 
-Region 是 Table 的可用性和分布式的最基本元素，Region 由每个列族的 Store 组成；通常 Habse 每个服务器上运行这比较少的 Region（20-200），但每个 Region 保存比较大的数据(5-20Gb)
+### Region Compaction
 
+`Region Compaction` 是从 Region 中的某个 Store 中选择部分 HFile 文件依次读取出存储的 KeyValue，然后排序之后写入一个新的 HFile 文件。
 
+`Region Compaction`  分为两类：
 
-一个 Region 由一个或多个 Store 组成，Store 的个数取决于表中列簇(column family)的个数，每一个列簇对应一个 Store。在 HBase 中每个列簇的数据都集中存放在一起形成一个存储单元 Store，因此建议将具有相同 IO 特性的数据设置在同一个列簇中。
+- `Minor Compaction`：选取 Store 的部分 HFile 合并成一个更大的 HFile
+- `Major Compaction`：Store 中的所有 HFile 合并成一个 HFile，合并过程中会完全清理掉被删除的数据、过期数据、超过版本设置的数据
 
-每一个 Store 由一个 MemStore 和一个或多个 HFile 组成，用户写入的数据会先写到 MemStore，当 MemStore 写满(缓存数据超过阈值，默认 128M)之后系统会异步地将数据 flush 成一个 HFile 文件，当 HFile 文件的数据超过一定阈值之后系统将会执行 Compact 操作将这些小文件通过一定策略合并成一个或多个大文件。
+`Region Compaction`  之后会提升系统的读性能：
 
+- Region 经过 Compaction 之后文件的数量减少，因而在读数据时的 IO 操作减少
+- HFile 在合并的过程中会将其他 DataNode 的数据读取到当前 RegionServer 然后再合并，从而提高了数据的本地化率，减少读数据时的网络开销
+- Major Compaction 会删除冗余的数据，减少了读数据时扫描的数据量
 
-Region 中的数据是以 LSM 树的形式存放，LSM 树的索引分为两部分：内存部分和磁盘部分。在 Region 中内存部分就是 MemStore，而磁盘部分就是 StoreFile。
+`Region Compaction` 的过程需要读写数据，因此也会有明显的副作用：
 
-### Region 合并
+- 执行文件合并之前需要读取数据，增加 IO 和网络开销，导致读数据时有明显的 “毛刺” 现象
+- 文件合并之后需要再次写入磁盘，导致写放大
 
-HFile 小文件如果数量太多会导致读取效率低，为了提高读取效率，LSM 树体系架构设计了 Compaction，Compaction 的核心功能是将小文件合并成大文件，提高读取效率。
+由于 Region 在 Compaction 的过程中会影响业务性能，而 Major Compaction 过程中所有的 HFile 都会参与合并，因此一般会关闭自动触发在线 Major Comapction，而是在业务低峰期手动触发。
 
-Compaction 是从一个 Region 的一个 Store 中选择部分 HFile 文件进行合并，先从这些待合并的数据文件中依次读出 KeyValue，再由小到大排序后写入一个新的文件，之后新生成的文件就会取代之前已经合并的所有文件对外提供服务。
+`Region Comapction` 通常会在三种情况下触发：
 
-HBase 根据合并规模将 Compaction 分为两类：
+- MemStore flush 之后检查当前 Store 中的文件数，如果超过 `hbase.hstore.compactionThreshold` 的值就会触发 Compaction
+- HRegionServer 在后台运行 `compactionChecker` 线程周期性的检查 Store 是否需要 Minor Compaction，如果不需要则检查是否需要执行 Major Compaction
+- 通过手动的方式触发 Major Compaction 执行
 
-- Minor Compaction：选取部分小的、相邻的 HFile，将它们合并成一个更大的 HFile
-- Major Compaction：将一个 Store 中所有的 HFile 合并成一个 HFile，这个过程会完全清理掉被删除的数据、TTL 过期数据、版本号超过设定版本号的数据。一般情况下 Major Compaction 持续时间比较长，消耗的资源比较多，对业务有比较大的影响，因此线上数据量比较大的通常推荐关闭自动触发 Major Compaction 功能，而是在业务低峰期手动触发
+Region Compaction 触发后 HBase 就会开始执行 Compaction 流程，HRegionServer 在后台运行着 `compactSplitThread` 线程处理 Compaction，该线程首先会从对应 Store 中根据文件选取算法选择合适的 HFile 文件进行合并，然后将这些文件在特定的线程池中执行文件合并的具体操作。
 
-Compaction 有以下核心作用：
+`Region Compaction` 首先会排除 Store 中不满足条件的 HFile 文件：
 
-- 合并小文件，减少文件数，稳定随机读延迟
-- 提供数据的本地化率，本地化率越高，在 HDFS 上访问数据时延迟就越小(不需要通过网络访问)
-- 清除无效数据，减少数据存储量
+- 当前正在执行 Compaction 的 HFile 文件
+- 文件大小超过 `hbase.hstore.compaction.max.size` 的文件
 
-Compaction 在执行过程中有个比较明显的副作用：Compaction 操作重写文件会带来很大的带宽压力以及短时间 IO 压力，Compaction 过程需要将小文件数据跨网络传输，然后合并成一个大文件再次写入磁盘。因此 Compaction 操作可以认为是用短时间的 IO 消耗以及贷款消耗换取后续查询的低延迟，从读取响应时间图上可以看到读取响应时间由比较大的毛刺，这是因为 Compaction 在执行的时候占用系统资源导致业务读取性能受到波及。
+剩余的文件需要继续判断是否需要触发 Major Compaction，如果满足任意一个条件则这些文件需要全部参与 Compaction：
 
-HBase 中 Compaction 只有在特定的触发条件才会执行，一旦触发就会按照特定的流程执行 Compaction。HBase 会将该 Compaction 交由一个独立的线程处理，该线程首先会从对应 Store 中选择合适的 HFile 文件进行合并，选取文件有多种算法，如：RatioBasedCompactionPolicy、ExploringCompactionPolocy 和 StripeCompactionPolicy 等，也可以自定义实现 Compaction 接口实现自定义的策略，挑选出合适的文件后，HBase 会根据这些 HFile 总大小挑选对应的线程池处理，最后对这些文件执行具体的合并操作。
+- 上次执行 Major Compaction 的时间早于 `hbase.hregion.majorcompaction` 并且文件数量小于 `hbase.hstore.compaction.max`
+- 文件中含有 reference 文件(Region 分裂产生的临时文件)
 
-#### 触发时机
+如果不满足则会在候选文件上利用合并策略选择合适的文件进行合并，HBase 提供了多种文件和并策略：
 
-HBase 中触发 Compaction 的时机很多，最常见的有三种：
+- `RatioBasedCompactionPolicy`：选择
+- `ExploringCompactionPolicy`
+- `FIFOCompactionPolicy`
+- `StripeCompactionPolicy`
+- `DateTieredCompactionPolicy`
 
-- MemStore Flush：MemStore Flush 会产生 HFile 文件，在每次执行完 flush 操作之后都会对当前 Store 中的文件数进行判断，一旦 Store 中总文件数大于 hbase.hstore.compactionThreshold 就会触发 Compaction。Compaction 是以 Store 为单位进行的，但是在 flush 触发条件下整个 Region 的所有 Store 都会执行 compaction 检查，所以一个 Region 有可能会在短时间内执行多次 Compaction
-- 后台线程周期性检查：RegionServer 在启动时在后台启动一个 CompactionChecker 线程，用于定期触发检查对应 Store 是否需要执行 Compaction，检查周期为 hbase.server.thread.wakefrequency * hbase.server.compactchecker.interval.multiplier。和 flush 不同的是，该线程优先检查 Store 中总文件数是否大于阈值 hbase.hstore.compactionThreshold，一旦大于就会触发 Compaction；如果不满足，接着检查是否满足 MajorCompaction 条件，如果当前 Store 中 HFile 的最早更新时间早于某个值(hbase.hregion.majorcompaction*(1+hbase.hregion.majorcompaction.jitter))，默认是 7 天
-- 手动触发：手动触发 Compaction 大多是为了执行 Major Compaction，Major Compaction 会比较大的影响业务性能且可以删除无效数据，可以在需要的时候手动触发 Major Compaction
+创建表的时候可以指定列簇的 Compaction 策略：
 
-#### HFile 选择
+```java
+ColumnFamilyDescriptorBuilder
+    .setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
+TableDescriptorBuilder.setCompactionEnabled(true)
+    .setColumnFamily(columnFamily);
+```
 
-选择合适的文件进行合并是整个 Compaction 的核心，因为合并文件的大小及其当前承载的 IO 数直接决定了 Compaction 的效果以及对整个系统业务的影响程度。
+选择出需要执行 Compaction 文件之后,`CompactSplit` 根据文件的大小选择合适的线程池来执行文件合并操作，`CompactSplit` 内部构造了多种线程池，不同的线程池处理不同大小的文件：
 
-HBase 提供的选择策略会首先对该 Store 中所有 HFile 逐一进行排查，排除不满足条件的部分文件：
+- `longCompactions`：处理总文件大小超过 `hbase.regionserver.thread.compaction.throttle` 的 Compaction 操作
+- `shortCompactions`：处理文件大小不超过阈值的 Compaction 操作
 
-- 排除当前正在执行 Compaction 的文件以及比这些文件更新的文件
-- 排除某些过大的文件，如果文件大于 hbase.hstore.compaction.max.size 则排除，默认是 Long.MAX_VALUE
+确定执行 Compaction 操作的线程池之后就会在选定的线程池内执行合并操作，合并流程分为 4 步：
 
-经过排除后留下来的文件称为候选文件，接下来 HBase 再判断候选文件是否满足 Major Compaction 条件，如果满足就会选择全部文件进行合并。只要满足其中一个条件就会执行 Major Compaction：
-
-- 用户强制执行 Major Compaction
-- 长时间没有进行 Major Compaction(上次执行 Major Compaction 的时间早于当前时间 - hbase.hregion.majorcompaction)且候选文件数小于 hbase.hstore.compaction.max，默认 10
-- Store 中含有 reference 文件(Region 分裂产生的临时文件，需要在 Compaction 过程中清理)
-
-如果满足 Major Compaction 则待合并的 HFile 就是 Store 中所有的 HFile，如果不满足则 HBase 需要继续采用文件选择策略选择合适的 HFile。HBase 主要有两种文件选择策略：RatioBasedCompactionPolicy 和 ExploringCompactionPolicy
-
-##### RatioBasedCompactionPolicy
-
-从老到新逐一扫描所有候选文件，满足任意一个条件就停止扫描：
-
-- 当前文件大小小于比当前文件新的所有文件大小总和 * ratio
-- 当前所剩候选文件数小于等于 hbase.store.compaction.min，默认为 3
-
-停止扫描后，待合并的文件就是当前扫描文件以及比它更新的所有文件
-
-##### ExploringCompactionPolicy
-
-Exploring 策略会记录所有合适的文件结合，并在这些文件集合中寻找最优解，即待合并文件数最多或者待合并文件数相同的情况下文件较小
-
-#### 挑选合适的执行线程池
-
-选择出了待合并的文件集合之后，需要挑选出合适的处理线程来进行正真的合并操作。HBase 实现了一个专门的类 CompactSplitThread 负责接收 Compaction 请求和 split 请求，为了能够独立处理这些请求，这个类内部构造了多个线程池：
-
-- longCompactions：处理大 Compaction，大 Compaction 并不是 Major Compaction，而是 Compaction 的总文件大小超过 hbase.regionserver.thread.compaction.throttle，且 longCompactions 线程池默认只有 1 个线程，使用参数 hbaes.regionserver.thread.compaction.large 设置
-- shortCompactions：处理小 Compaction
-- splits：负责处理所有的 split 请求
-
-#### HFile 文件合并
-
-选出待合并的 HFile 集合以及合适的处理线程，接下来就执行合并流程，总共分为 4 步：
-
-- 分别读出待合并 HFile 文件的 KeyValue，进行归并排序处理，之后写到 ./tmp 目录下的临时文件中
-- 将临时文件移动到对应 Store 的数据目录
+- 读出待合并 HFile 文件的 KeyValue，归并排序处理后写到 ./tmp 目录下的临时文件中
+- 待合并的 HFile 处理万之后将临时文件移动到对应 Store 的数据目录
 - 将 Compaction 的输入文件路径和输出文件路径封装成 KV 写入 HLog 日志，并打上 Compaction 标记，最后强制执行 sync
 - 将对应 Store 数据目录下的 Compaction 输入文件全部删除
+
+#### HFile 文件合并
 
 HFile 合并流程具有很强的容错性和幂等性：
 
@@ -114,7 +102,7 @@ Compaction BandWidth Limit 优化方案主要设计两个参数：
 - compactBwLimit：一次 Compaction 的最大带宽使用量，如果 Compaction 所使用的带宽高于该值，就会强制其 sleep 一段时间
 - numOfFileDisableCompactLimit：在写请求非常大的情况下，限制 Compaction 带宽必然会导致 HFile 堆积，进而会影响读请求响应延迟，因此一旦 Store 中 HFile 数据超过设定值，带宽限制就会失效
 
-#### Compaction 高级策略
+#### Compaction 策略
 
 Compaction 合并小文件，一方面提高了数据的本地化率，降低了数据读取的响应延时，另一方面也会因为大量消耗系统资源带来不同程度的短时间读取响应毛刺。HBase 提供了 Compaction 接口，可以根据自己的应用场景以及数据集订制特定的 Compaction 策略，优化 Compaction 主要从几个方面进行：
 
@@ -129,13 +117,7 @@ FIFO Compaction 策略参考了 RocksDB 的实现，它选择过期的数据文�
 FIFO Compaction 策略适用于大量短时间存储的原始数据的场景，比如推荐业务、最近日志查询等。FIFO Compaction 可以在表或者列簇上设置：
 
 ```java
-Connection conn = ConnectionFactory.createConnection();
 
-HTableDescriptor desc = conn.getAdmin().getTableDescriptor(TableName.valueOf(""));
-desc.setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
-
-HColumnDescriptor colDesc = desc.getFamily("family".getBytes());
-colDesc.setConfiguration(DefaultStoreEngine.DEFAULT_COMPACTOR_CLASS_KEY, FIFOCompactionPolicy.class.getName());
 ```
 
 ##### Tier-Based Compaction
@@ -182,6 +164,8 @@ Minor 合并负责将一些小文件合并成更大的文件，合并的最小�
 可以通过设置 ```hbase.hstore.cmpaction.min.size``` 和 ```hbase.hstore.compaction.max.size``` 设置参与合并的文件的大小，在达到单次 compaction 允许的最大文件数之前小于最小阈值的文件也会参与 compaction 但是大于最大阈值的文件不会参与。
 
 Major 合并将所有的文件合成一个，这个过程是通过执行合并检查自动确定的。当 MemStore 被 flush 到磁盘、执行 compaction 或者 major_compaction 命令、调用合并相关 API都会触发检查。
+
+
 
 ### Region 分裂
 
@@ -293,3 +277,31 @@ Region 在迁移的过程中涉及到多个状态的变化，这些状态可以�
 - meta 表，只存储 Region 所在的 RegionServer，并不存储迁移过程中的中间状态，如果 Region 迁移完成则会更新为新的对应关系，如果迁移过程失败则保存的是之前的映射关系
 - master 内存，存储整个集群所有的 Region 信息，根据这个信息可以得出此 Region 当前以什么状态在哪个 RegionServer 上。Master 存储的 Region 状态变更都是由 RegionServer 通过 ZK 通知给 Master 的，所以 Master 上的 Region 状态变更总是滞后于真正的 Region 状态变更，而 WebUI 上看到的 Region 状态都是来自于 Master 的内存信息
 - ZK，存储的是临时性的状态转移信息，作为 Master 和 RegionServer 之间反馈 Region 状态的通信，Master 可以根据 ZK 上存储的状态作为依据据需进行迁移操作
+
+### Region 合并
+
+Regin 合并用于空闲 Region 很多从而导致集群管理运维成本增加的场景，通过使用在线合并功能将这些 Region 与相邻的 Region 合并，减少集群中空闲的 Region 个数。
+
+Region 合并的主要流程如下：
+
+- 客户端发送 merge 请求给 Master
+- Master 将待合并的所有 Region 都 move 到同一个 RegionServer 上
+- Master 发送 merge 请求给该 RegionServer
+- RegionServer 启动一个本地事务执行 merge 操作
+- merge 操作将待合并的两个 Region 下线，并将两个 Region 的文件进行合并
+- 将这两个 Region 从 hbase:meta 中删除，并将新生成的 Region 添加到 hbase:meta 中
+- 将新生成的 Region 上线
+
+HBase 使用 merge_region 命令执行 Region 合并，merge_region 操作是异步的，需要在执行一段时间之后手动检测合并是否成功，默认情况下 merge_region 只能合并相邻的两个 Region，如果可选参数设置为 true 则可以强制合并非相邻的 Region，风险较大不建议生产使用：
+
+```shell
+merge_region 'regionA', 'regionB', true
+```
+
+
+
+### 调优
+
+通常 Habse 每个服务器上运行这比较少的 Region（20-200），但每个 Region 保存比较大的数据(5-20Gb)
+
+每一个 Store 由一个 MemStore 和一个或多个 HFile 组成，用户写入的数据会先写到 MemStore，当 MemStore 写满(缓存数据超过阈值，默认 128M)之后系统会异步地将数据 flush 成一个 HFile 文件，当 HFile 文件的数据超过一定阈值之后系统将会执行 Compact 操作将这些小文件通过一定策略合并成一个或多个大文件。

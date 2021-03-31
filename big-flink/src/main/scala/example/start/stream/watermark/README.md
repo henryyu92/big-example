@@ -22,7 +22,7 @@ Watermark 机制只支持事件事件，因此在使用 Watermark 时需要指�
 - 在 DataStream Source 算子结果的 Source Function 中定义
 - 自定义 Timestamp Assigner 和 Watermark Generator 生成
 
-数据在进入 Flink 系统时就直接分配 EventTime 和 Watermark，需要复写 SouceFunction 的 run 方法实现数据接入逻辑，并通过 collectWithTimestamp 方法定义 EventTime 以及通过 emitWatermark 方法生成 Watermark
+数据在进入 Flink 系统时就直接分配 EventTime 和 Watermark，需要复写 SourceFunction 的 run 方法实现数据接入逻辑，并通过 collectWithTimestamp 方法定义 EventTime 以及通过 emitWatermark 方法生成 Watermark
 
 ```scala
 val input = List(("a", 1L, 1), ("b", 1L, 1), ("b", 3L, 1))

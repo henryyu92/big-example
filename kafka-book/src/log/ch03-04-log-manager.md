@@ -189,7 +189,7 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 ### Log Compaction
 <center>
 
-![Log Compaction](img/log-compaction.png)
+![Log Compaction](../img/log-compaction.png)
 </center>
 
 

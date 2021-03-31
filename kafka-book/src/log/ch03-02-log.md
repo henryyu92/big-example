@@ -12,7 +12,7 @@ Log 是 Kafka 日志的实现，客户端发送的消息通过 Log 实现持久�
 Log 由多个分段 (Segment) 组成，每个分段负责维护部分消息数据。分段中只有一个处于活跃状态 (activeSegment) 用于消息的追加，当处于活跃状态的分段达到阈值条件后会滚动创建新的分段。
 <center>
 
-![Log](img/log.png)
+![Log](../img/log.png)
 </center>
 
 日志分段是 Kafka 中最基本的数据存储单元，每个分段对应着一个物理文件。

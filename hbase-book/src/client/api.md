@@ -138,6 +138,7 @@ ColumnFamilyDescriptor descriptor = ColumnFamilyDescriptorBuilder
 	.setMaxVersions(1)
 	.build();
 admin.addColumnFamily(table, descriptor);
+
 admin.modifyColumnFamily(table, descriptor);
 
 admin.enableTable(table);

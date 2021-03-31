@@ -84,7 +84,7 @@ Kafka 采用时间轮算法使得 `SystemTimer` 的插入和删除复杂度为 O
 
 Kafka 中的时间轮(TimingWheel)是一个存储定时任务的环形队列，底层采用数组实现，数组中的每个元素可以存放一个定时任务列表(TimeTaskList)，任务列表是一个环形的双向链表，链表中的每一项表示的是定时任务项(TimeTaskEntry)，其中封装了真正的定时任务(TimeTask)。
 
-![TimingWheel](img/time-wheel.png)
+![TimingWheel](../img/time-wheel.png)
 
 时间轮是由多个时间格组成的环形列表，每个时间格称为桶(bucket)，每个中保存着对应时间跨度(tickMs)范围内的任务，因此整个时间轮的时间跨度(interval) 为 `tickMs * wheelSize`。时间轮有一个表盘指针(currentTime)表示时间轮当前所处的时间，currentTime 可以将整个时间轮划分为到期部分和未到期部分，currentTime 当前指向的时间格表示刚好到期，需要处理此时间格所对应 TimerTaskList 中所有的任务。
 

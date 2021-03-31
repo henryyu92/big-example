@@ -19,4 +19,3 @@ RegionServer 宕机之后 HBase 会在检测到宕机之后将该 RegionServer �
 HBase 使用 ZK 协助 Master 检测 RegionServer 宕机，所有 RegionServer 在启动之后都会在 ZK 节点 /rs 上注册一个子节点，这个子节点的类型为临时节点，一旦连接在该节点上的客户端因为某些原因发生会话超时，这个临时节点会自动消失，并通知 watch 在该临时节点上的其他客户端。
 
 在一些情况下，由于 RegionServer 发生了长时间的 GC 导致心跳长时间断开，这是临时节点就会离线，导致 Master 认为 RegionServer 宕机。ZK 的会话超时时间可以在配置文件中设置，参数是 zookeeper.session.timeout，默认是 180s，但是此参数的调整需要配合 ZK 服务器的参数 tickTime, minSessionTimeout, maxSessionTimeout
-

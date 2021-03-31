@@ -9,7 +9,7 @@
 
 <center>
 
-![Log](img/records.png)
+![Log](../img/records.png)
 </center>
 
 
