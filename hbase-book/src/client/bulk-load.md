@@ -1,19 +1,8 @@
 ## BulkLoad
 
-HBase 提供了将数据生成 HFile 然后直接加载到对应的 Region 下的 Column Family 内，在生成 HFile 时服务端不会有任何 RPC 调用，只有在 load HFile 时会调用 RPC。bulkLoad 是一种完全离线的快速批量写入方案，不会对集群产生巨大压力
+HBase 提供了 BulkLoad 将数据生成 HFile 然后直接加载到对应的 Region 下的 Column Family 内。bulkLoad 是一种完全离线的快速批量写入方案，在生成 HFile 时服务端不会有任何 RPC 调用，只有在 load HFile 时会调用 RPC，不会对集群产生巨大压力。
 
-
-
-如果有大量数据需要导入到 HBase 系统，此时调用 HBase API 进行处理极有可能会给 RegionServer 带来较大的写入压力：
-
-- 引起 RegionServer 频繁 flush，进而不断 compact、split 影响集群稳定性
-- 引起 RegionServer 频繁 GC，影响集群稳定性
-- 消耗大量 CPU 资源、带宽资源、内存资源以及 IO 资源，与其他业务产生资源竞争
-- 在某些场景下，比如平均 KV 大小比较大的场景，会耗尽 RegionServer 的处理线程，导致集群阻塞
-
-HBase 提供了另一种将数据写入 HBase 集群的方法：BulkLoad。BulkLoad 首先使用 MapReduce 将待写入集群数据转换为 HFile 文件，再直接将这些 HFile 文件加载到在线集群中，BulkLoad 没有将写请求发送给 RegionServer 处理，可以有效避免 RegionServer 压力较大导致的问题。
-
-BulkLoad 主要由两个阶段组成：
+BulkLoad 首先使用 MapReduce 将待写入集群数据转换为 HFile 文件，再直接将这些 HFile 文件加载到在线集群中。
 
 - HFile 生成阶段。这个阶段会运行一个 MapReduce 任务，mapper 方法将据组装成一个复合 KV，其中 key 是 rowkey，value 可以是 KeyValue 对象、Put 对象甚至 Delete 对象；reduce 方法由 HBase 负责，通过方法 HFileOutputFormat2.configureIncrementlLoad() 进行配置，这个方法主要负责以下事项：
   - 根据表信息配置一个全局有序的 partitioner
@@ -38,12 +27,6 @@ bin/hadoop jar ${HBASE_HOME}/hbase-server-Version.jar completebulkload <hdfs://s
 
 如果表没在集群中，工具会自动创建表。
 
-### MapReduce
-
 
 
 ### Spark
-
-
-
-### Flink
