@@ -274,5 +274,3 @@ curl -X GET 'ip:/port/_cat/master?v&pretty'
 - `/_cat/shards`：返回集群中索引的分片信息
 
 ### Bulk
-
-### Search
