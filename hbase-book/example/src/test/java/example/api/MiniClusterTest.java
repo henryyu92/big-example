@@ -3,6 +3,7 @@ package example.api;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -53,6 +54,26 @@ public class MiniClusterTest {
         Result result2 = table.get(get2);
         assertEquals(Bytes.toString(result2.getRow()), "ROWKEY-1");
         assertEquals(Bytes.toString(result2.value()), "DATA-2");
+    }
+
+    @Test
+    public void testSplitRegion() throws IOException {
+
+        TableName tableName  = TableName.valueOf("test-region-split");
+        Table table  = utility.createTable(tableName, "split-family");
+
+        Put put = new Put(Bytes.toBytes("111"));
+        put.addColumn(Bytes.toBytes("split-family"), Bytes.toBytes("cq"), Bytes.toBytes("data1"));
+        table.put(put);
+
+        Put put1 = new Put(Bytes.toBytes("222"));
+        put1.addColumn(Bytes.toBytes("split-family"), Bytes.toBytes("cq"), Bytes.toBytes("data1"));
+        table.put(put1);
+
+
+        Admin admin = utility.getAdmin();
+        admin.split(tableName,  "112".getBytes());
+
     }
 
 }

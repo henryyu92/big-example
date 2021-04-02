@@ -1,47 +1,100 @@
-### Region
+## Region
 
-Region 是 Table 的可用性和分布式的最基本元素，Region 由和表列簇相等个数的 Store 组成，写入的数据最终会形成多个 HFile 文件存储在 HDFS。
+Region 是 HBase 的数据分片，Region 由 Store 组成，每个 Region 包含的 Store 数和表的列簇相等。写入 Region 的数据最终会形成多个 StoreFile 文件以 HFile 格式存储在 HDFS。
 
-默认情况下，建表时只有一个 Region，随着数据的写入 Region 在达到阈值以后会触发分裂。
+HBase 为每个 Region 维护了一个状态，并将 Region 的状态持久化到 `hbase:meta` 表，而 `hbase:meta` 表的 Region 的状态持久化在 ZooKeeper 中。
 
-集群在负载不均衡或者 RegionServer 故障时需要将 Region 重新迁移到合适的节点。
+- `OFFLINE`：Region 处于下线状态
+- `OPENING`：Region 在被打开的过程中
+- `OPEN`：Region 处于打开状态，并且 RegionServer 已经通知了 Master
+- `FAILED_OPEN`： Region 打开过程中失败
+- `CLOSING`：Region 处于被关闭的过程中
+- `CLOSED`：RegionServer 关闭了 Region，并且通知了 Master
+- `FAILED_CLOSE`：RegsionServer 关闭 Region 的过程中失败
+- `SPLITTING`：Resion 正在进行分裂的过程中
+- `SPLIT`：Region 已经完成分裂，并且已经通知 Master
+- `SPLITTING_NEW`：当前 Region 是在正在分裂的过程中创建
+- `MERGING`：Region 正在进行合并过程
+- `MERGED`：Region 已经合并完成
+- `MERGING_NEW`：Region 是正在进行合并过程中创建
 
 ### Region 分裂
 
-Region 分裂是实现分布式可扩展的基础，HBase 定义多种分裂策略，当 Region 满足设置的分裂策略时就会触发分裂操作。
+Region 分裂是实现分布式可扩展的基础，HBase 定义多种分裂策略，当 Region 满足配置的分裂策略的条件时就会触发分裂操作。
 
 #### 分裂策略
 
 Region 分裂策略决定 Region 是否需要分裂，HBase 定义了多种分裂策略，不同的分裂策略适用于不同的应用场景：
 
-- `ConstantSizeRegionSplitPolicy`：Region 中最大 Store 超过设置阈值`hbase.hregion.max.filesize` 就会触发分裂。这种策略实现简单，但是对于大表和小表没有明显的区分，阈值设置较大则对大表比较友好，而小表可能不会分裂，极端情况下只有一个 Region，这对 RegionServer 压力比较大；如果阈值设置的比较小，则大表会在集群中产生大量的 Region，从而会导致大量的 HFile，这对集群的管理来说增加了负担
-- `IncreasingToUpperBoundRegionSplitPolicy`：这种策略也是在一个 Region 中最大的 Store 大小超过阈值之后触发分裂，但是这种策略的阈值并不是固定的，而是和 Region 所属表在的 RegionServer 上的 Region 数量有关，其值为 ```regions * regions * regions * flushsize * 2```，这个值得上限为 MaxRegionFileSize，这种策略会使得很多小表就会产生大量小的 Region
-- `SteppingSplitPolicy`：这种策略的分裂阈值大小和待分裂 Region 所属表当前 RegionServer 上的 Region 个数有关，如果 Region 个数为 1，分裂阈值为 flushsize * 2，否则为 MaxRegionFileSize，这种策略不会使得小表再产生大量的小 Region
+- `ConstantSizeRegionSplitPolicy`：Region 中某个 Store 超过设置阈值`hbase.hregion.max.filesize` 就会触发分裂。阈值设置过大会导致小表很难分裂，设置过小会导致大表分裂过多 Region
+- `IncreasingToUpperBoundRegionSplitPolicy`：Region 中某个 Store 超过阈值就会触发分裂，阈值为 `hbase.hregion.max.filesize` 和 `2 * hbase.hregion.memstore.flush.size * tableRegionsCount * tableRegionsCount * tableRegionsCount` 的最小值，其中 `tableRegoinCount` 为当前表在当前 RegionServer 上的 Region 数量
+- `SteppingSplitPolicy`：继承自 `IncreasingToUpperBoundRegionSplitPolicy`，阈值策略相同，不同的是会判断当前表在当前 RegionServer 上的 Region 数量，如果为 1 的话则阈值为 `2 * hbase.hregion.memstore.flush.size`，否则就是 `hbase.hregion.max.filesize`
 
-在创建表时指定不同的分裂策略
+HBase 默认使用 `SteppingSplitPolicy` 分裂策略，通过继承 `IncreasingToUpperBoundRegionSplitPolicy`  可以自定义分裂策略。分裂策略可以通过配置文件全局设置，也可以在创建表的时候设置：
+
+```xml
+<property>
+    <name>hbase.regionserver.region.split.policy</name>
+    <value>org.apache.hadoop.hbase.regionserver.IncreasingToUpperBoundRegionSplitPolicy</value>
+</property>
+```
 
 ```java
-TableDescriptorBuilder.setRegionSplitPolicyClassName(class_name);
+TableDescriotorBuilder tableDesc = TableDescriptorBuilder.newBuilder(TableName.of("tableName"));
+tableDesc.setRegionSplitPolicyClassName(CustomSplitPolicy.class.getName());
 ```
 
 #### 分裂点
 
-Region 触发分裂之后首先需要找到分裂点，Region 的分裂点定义为：**Region 中最大 Store 中的最大文件中最中心的 Block 的首个 rowkey**，如果 rowkey 是整个文件的首个 rowkey 或最后一个 rowkey 时则没有分裂点，此时整个 Region 中只有一个 block。
+Region 触发分裂之后首先需要找到分裂点，分裂策略定义了获取分裂点的方法，默认的分裂点从 Region 中最大的 Store 中获取。
 
+```java
+protected byte[] getSplitPoint() {
+    // 外部指定分裂点，通常是手动触发分裂
+    byte[] explicitSplitPoint = this.region.getExplicitSplitPoint();
+    if (explicitSplitPoint != null) {
+        return explicitSplitPoint;
+    }
+    List<HStore> stores = region.getStores();
+
+    byte[] splitPointFromLargestStore = null;
+    long largestStoreSize = 0;
+    // 从最大的 Store 中获得分裂点
+    for (HStore s : stores) {
+        Optional<byte[]> splitPoint = s.getSplitPoint();
+        // Store also returns null if it has references as way of indicating it is not splittable
+        long storeSize = s.getSize();
+        if (splitPoint.isPresent() && largestStoreSize < storeSize) {
+            splitPointFromLargestStore = splitPoint.get();
+            largestStoreSize = storeSize;
+        }
+    }
+
+    return splitPointFromLargestStore;
+}
 ```
-# 手动执行 split
-
-```
-
-
 
 #### 分裂流程
 
-HBase 将分裂流程包装成事务，从而保证分裂过程的原子性。分裂流程分为三个阶段：prepare， exuecte 和 rollback。
+确定 Region 分裂的分裂点之后，HBase 就开始执行分裂过程。为了保证分裂过程的原子性，Region 的分裂过程包装成了事务，整个分裂流程分为三个阶段：prepare, execute 和 rollback。
 
 ##### Prepare
 
-prepare 阶段在内存中初始化两个子 Region，每个 Region 对应一个 HRegionInfo 对象，同时会生成一个 transaction journal 对象用来记录分裂的进程
+prepare 阶段在内存中初始化两个子 Region，每个 Region 对应一个 HRegionInfo 对象，记录 Region 的 startKey 和 endKey，然后向 HMaster 发送 RPC 请求。
+
+```java
+final TableName table = parent.getTable();
+final RegionInfo hri_a = RegionInfoBuilder.newBuilder(table)
+    .setStartKey(parent.getStartKey())
+    .setEndKey(midKey)
+    .build();
+final RegionInfo hri_b = RegionInfoBuilder.newBuilder(table)
+    .setStartKey(midKey)
+    .setEndKey(parent.getEndKey())
+    .build();
+```
+
+
 
 ##### execute
 
@@ -87,7 +140,7 @@ HBCK 可以查看并修复在 split 过程中发生异常导致 region-in-transa
 -fixReferenceFiles
 ```
 
-
+#### 手动分裂
 
 ### Region 迁移
 
@@ -153,9 +206,3 @@ HBase 使用 merge_region 命令执行 Region 合并，merge_region 操作是异
 ```shell
 merge_region 'regionA', 'regionB', true
 ```
-
-
-
-### 调优
-
-通常 Habse 每个服务器上运行这比较少的 Region（20-200），但每个 Region 保存比较大的数据(5-20Gb)

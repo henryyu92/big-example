@@ -55,3 +55,9 @@ HBCK 可以恢复集群不一致的问题，Region 一致性问题修复有两�
 - COMPACTION_ENABLED：设置是否开启 Compaction，默认为 true，表示允许 Minor/Major Compaction 自动执行
 - MEMSTORE_FLUSHSIZE：单个 MemStore 大小，与 hbase.hregion.memstore.flush.size 配置相同，默认 128M
 - DURABLITY：WAL 持久化等级，默认为 USER_DEFAULT，可选项有 SKIP_WAL、ASYNC_WAL 以及 FSYNC_WAL，在允许异常情况下部分数据丢失时可以设置为 SKIP_WAL 或者 ASYNC_WAL
+
+
+
+
+
+#### Region 本地化
