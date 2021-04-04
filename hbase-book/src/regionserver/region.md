@@ -76,51 +76,18 @@ protected byte[] getSplitPoint() {
 
 #### 分裂流程
 
-确定 Region 分裂的分裂点之后，HBase 就开始执行分裂过程。为了保证分裂过程的原子性，Region 的分裂过程包装成了事务，整个分裂流程分为三个阶段：prepare, execute 和 rollback。
+Region 分裂过程比较复杂，涉及父 Region 中 HFile 文件分裂、子 Region 生成、meta 数据更改等很多子步骤，HBase 使用状态机的方式保存分裂过程中的每个子步骤状态，系统根据当前所属的状态决定是否回滚。
 
-##### Prepare
-
-prepare 阶段在内存中初始化两个子 Region，每个 Region 对应一个 HRegionInfo 对象，记录 Region 的 startKey 和 endKey，然后向 HMaster 发送 RPC 请求。
-
-```java
-final TableName table = parent.getTable();
-final RegionInfo hri_a = RegionInfoBuilder.newBuilder(table)
-    .setStartKey(parent.getStartKey())
-    .setEndKey(midKey)
-    .build();
-final RegionInfo hri_b = RegionInfoBuilder.newBuilder(table)
-    .setStartKey(midKey)
-    .setEndKey(parent.getEndKey())
-    .build();
-```
-
-
-
-##### execute
-
-execute 阶段是整个分裂过程的核心阶段，总共分为 8 个步骤：
+- 检查 Region 是否可以进行分裂，然后将 Region 的状态设置为 `SPLITTING`
+- 关闭父 Region 并触发父 Region 的的 flush 操作将数据全部持久化到磁盘，此后客户端到该 Region 的请求都会抛出 `NotServingRegionException`
+- 在父 Region 的文件存储目录下创建临时文件夹 `.split`，并在临时文件夹下创建两个子 Region 的存储目录，然后在子 Region 的列簇对应的存储目录中生成 reference 文件，文件名为 `hfile_name.region_name`，因此根据 reference 文件名即可定位该文件指向父 Region 的 HFile 文件。reference 文件是一个引用文件，文件内容并不是数据，而是由分裂点 splitKey 和 boolean 类型的变量表示该文件引用的是父文件的上部分 (true) 还是下部分 (false)，使用 Hadoop 命令可以查看  reference 文件具体内容 `hadoop dfs -cat /<namespace>/<table>/<region>/.split/<colum_family>/<reference>`
+- 将子 Region 对应的存储文件拷贝到数据目录下，形成两个新的 Region
+- 修改 `meta` 表，将父 Region 的 `split` 和 `offline` 设置为 true，并记录两个子 Region，然后将父 Region 下线。父 Region 下线后并不会立马删除，而是在执行 Major Compaction 的时候删除
+- 开启生成的两个子 Region，并对外提供服务
 
 ![Region 分裂](../img/region-split.png)
 
-
-- RegionServer 将 ZK 节点 /region-in-transaction 中该结点的状态更改为 SPLITING
-- Master 通过 watch 节点 /region-in-transaction 检测到 Region 状态改变，并修改内存中 Region 的状态，在 Master 页面 RIT 模块可以看到 Region 执行 split 的状态信息
-- 在父存储目录下新建临时文件夹 .split，保存 split 后的 daughter region 信息
-- 关闭父 Region，父 Region 关闭数据写入并触发 flush 操作，将写入 Region 的数据全部持久化到磁盘，此后短时间内客户端落在父 Region 上的请求都会抛出 NotServingRegionException
-- 在 .split 文件夹下新建两个子文件夹，称为 daughter A，daughter B，并在文件夹中生成 reference 文件，分别指向父 Region 中对应文件。reference 文件是一个引用文件，文件内容并不是用户数据，而是由两部分组成：分裂点 splitkey 和 boolean 类型的变量表示该 reference 文件引用的是父文件的上半部分(true)或者下半部分(false)，使用 hadoop 命令 ```hadoop dfs -cat /hbase-rsgroup/data/default/...``` 可以查看 reference 文件内容
-- 父 Region 分裂为两个子 Region 后，将 daughter A、daughter B 拷贝到 HBase 根目录下，形成两个新的 Region
-- 父 Region 通知修改 hbase:meta 表后下线，不再提供服务。下线后父 Region 在 meta 表中的信息并不会马上删除，而是将 meta 表中的 split 列、offline 列标注为 true，并记录两个子 Region
-- 开启 daughter A、daughter B 两个子 Region。通知修改 hbase:meta 表正式对外提供服务
-
-##### rollback
-
-如果 execute 阶段出现异常，则执行 rollback 操作。为了实现回滚，整个分裂过程分为很多子阶段，回滚程序会根据当前进展到哪个子阶段清理对应的垃圾数据，整个分裂的过程的阶段由 RegionMergeTransactionPhase 类定义
-
-Region 分裂是一个比较复杂的过程，涉及到父 Region 中 HFile 文件分裂，子 Region 生成，meta 元数据更新等很多个子步骤，为了实现原子性，HBase 使用状态机的方式保存分裂过程中的每个子步骤状态，这样一旦出现异常，系统可以根据当前所处的状态决定是否回滚，以及如何回滚。目前这些中间状态都只存储在内存中，一旦在分裂过程中出现 RegionServer 宕机的情况则有可能出现分裂处于中间状态的情况，即 RIT 状态，这种情况下需要使用 HBCK 工具查看并分析解决方案。
-
-在 2.0 版本之后，HBase 实现了新的分布式事务框架 Procedure V2，新框架使用类似 HLog 的日志文件存储这种单机事务的中间状态，因此可以保证即使在事务执行过程中参与者发生了宕机，依然可以使用对应日志文件作为协调者，对事务进行回滚操作或者重试提交，从而大大减少甚至杜绝 RIT 现象。
-
-通过 reference 文件查找数据分为两步：
+分裂生成的子 Region 对应的文件为 reference 文件，其中没有存储真实的数据，数据查询需要通过 reference 文件。通过 reference 文件查找数据分为两步：
 
 - 根据 reference 文件名(父 Region 名 + HFile 文件名)定位到真实数据所在文件路径
 - 根据 reference 文件内容记录的两个重要字段确定实际扫描范围，top 字段表示扫描范围是 HFile 上半部分还是下半部分，如果 top 为 true 则表示扫描的范围为 [firstkey, splitkey)，如果 top 为 false 则表示扫描的范围为 [splitkey, endkey)
@@ -135,7 +102,9 @@ Master 会启动一个线程定期遍历检查所处于 splitting 状态的 Regi
 HBCK 可以查看并修复在 split 过程中发生异常导致 region-in-transaction 问题，主要命令包括：
 
 ```shell
+# 将下线的父 Region 强制上线
 -fixSplitParents
+# 将父 Region 下线并保留子 Region
 -removeParents
 -fixReferenceFiles
 ```
@@ -146,16 +115,9 @@ HBCK 可以查看并修复在 split 过程中发生异常导致 region-in-transa
 
 HBase 的集群负载均衡、故障恢复功能都是建立在 Region 迁移的基础之上，HBase 由于数据实际存储在 HDFS 上，在迁移过程中不需要迁移实际数据而只需要迁移读写服务即可，因此 HBase 的 Region 迁移是非常轻量级的。
 
-Region 迁移虽然是一个轻量级操作，但是实现逻辑依然比较复杂，其复杂性在于两个方面：
-
-- Region 迁移过程中设计多种状态的改变
-- Region 迁移过程中设计 Master，ZK 和 RegionServer 等多个组件的互相协调
-
-Region 迁移的过程分为 unassign 和 assign 两个阶段
+Region 迁移的过程分为 unassign 和 assign 两个阶段，其中 unassign 表示 Region 从 RegionServer 上下线，assign 表示 Region 在 RegionServer 上上线。
 
 #### unassign
-
-unassign 阶段是 Region 从 RegionServer 下线，总共涉及 4 个状态变化
 
 - Master 生成事件 M_ZK_REGION_CLOSING 并更新到 ZK 组件，同时将本地内存中该 Region 的状态修改为 PENDING_CLOSE
 - Master 通过 RPC 发送 close 命令给拥有该 Region 的 RegionServer，令其关闭该 Region
@@ -165,8 +127,6 @@ unassign 阶段是 Region 从 RegionServer 下线，总共涉及 4 个状态变�
 - RegionServer 执行完 Region 关闭操作后生成事件 RS_ZK_REGION_CLOSED 更新到 ZK，Master 监听到 ZK 节点变化后，更新该 Region 的状态为 CLOSED
 
 #### assign
-
-assign 阶段是 Region 从目标 RegionServer 上线，也会涉及到 4 个状态变化
 
 - Master 生成事件 M_ZK_REGION_OFFLINE 并更新到 ZK 组件，同时将本地内存中该 Region 的状态修改为 PENDING_OPEN
 - Master 通过 RPC 发送 open 命令给拥有该 Region 的 RegionServer，令其打开 Region
