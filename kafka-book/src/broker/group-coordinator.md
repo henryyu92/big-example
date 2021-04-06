@@ -1,6 +1,11 @@
 # GroupCoordinator
 
-Coordinator 在每个 Broker 上都会实例化一个对象，每个 GroupCoordinator 管理一个消费组。
+GroupCoordinator 是管理消费者组的组件，每个 Broker 上都会实例化一个 Coordinator。GroupCoordinator 负责消费者组相关的重要功能：
+- 处理 JoinGroupRequest 和 SyncGroupRequest 完成 ConsumerGroup 分区分配的工作
+- 通过 GroupMetadataManager 和内部 `__consumer_offsets` 维护 offset 信息，使得消费者变化时能够找回之前消费的 offset
+- 通过 MemberMetadata 记录 ConsumerGroup 相关信息，确保在 GroupCoordinator 异常时新的 GroupCoordinator 可以找到消费组的信息
+
+
 
 
 ## offset 管理
@@ -26,9 +31,11 @@ Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offset
 
 在处理完消费位移之后，Kafka 返回 OffsetCommitResponse 给客户端，OffsetCommitResponse 的结构如下：
 ```java
+
 ```
 可以通过 ```kafka-console-consumer.sh``` 脚本来查看 __consumer_offsets 中的内容：
 ```shell
+
 ```
 如果有若个案消费者消费了某个主题的消息，并且也提交了相应的消费位移，那么在删除这个主题之后会一并将这些消费位移信息删除。
 

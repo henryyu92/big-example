@@ -199,3 +199,7 @@ sendOffsetsToTransation 在处理完 AddOffsetsToTxnRequest 之后，生产者�
 WriteTxnMarkersRequest 请求是由 TransactionCoordinator 发向事务中各个分区的 leader 节点，当节点收到这个请求之后会在相应的分区总写入控制消息，控制消息用来标识事务的终结。
 
 TransactionCoordinator 将最终的 COMPLETE_COMMIT 或 COMPLETE_ABORT 信息写入 __transaction_state 以表明当前事务已经结束，此时可以删除主题 __transaction_state 中所有的关于事务的消息。由于主题 __transaction_state 采用的日志清理策略为日志压缩，所以这里的删除只需要将相应的消息设置为墓碑消息即可。
+
+
+
+https://blog.csdn.net/lianggx3/category_8961541_2.html
