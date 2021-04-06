@@ -1,6 +1,10 @@
 # 消费者协调器
 
-消费者协调器负责和组管理器交互以完成 offset 的管理以及分区的管理。消费者协调器在 `KafkaConsumer` 创建的时候初始化
+消费者协调器 (ConsumerCoordinator) 负责和组协调器 (GroupCoordinator) 交互以完成 offset 的管理以及分区的管理。消费者协调器在 `KafkaConsumer` 创建的时候初始化
+
+消费者协调器主要负责的工作：
+- 更新消费者缓存的 MetaData
+- 向组协调器申请
 
 ## 分区分配
 

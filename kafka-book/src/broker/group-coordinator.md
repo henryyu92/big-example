@@ -1,5 +1,6 @@
 # GroupCoordinator
 
+Coordinator 在每个 Broker 上都会实例化一个对象，每个 GroupCoordinator 管理一个消费组。
 
 
 ## offset 管理

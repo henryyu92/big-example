@@ -56,7 +56,7 @@ public class PartitionInfo{
 
 }
 ```
-Kafka 元数据的所有操作由 `Metadata` 控制，其内部维护了多个状态变量用于控制元数据的更新。`Metadata` 作为 `KafkaProducer` 的变量在其创建的时候实例化，`Metadata` 在 `KafkaProducer` 中会被多个线程读取，而其更新由 `Sender` 线程完成，为了保证线程安全，其对外暴露的所有方法都是 `synchronized`。
+Kafka 元数据的所有操作由 `Metadata` 管理，其内部维护了多个状态变量用于控制元数据的更新。`Metadata` 作为 `KafkaProducer` 的变量在其创建的时候实例化，`Metadata` 在 `KafkaProducer` 中会被多个线程读取，而其更新由 `Sender` 线程完成，为了保证线程安全，其对外暴露的所有方法都是 `synchronized`。
 ```java
 public class Metadata extends Closeable {
     // 更新失败时，backoff 时间

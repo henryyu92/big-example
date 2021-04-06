@@ -20,6 +20,9 @@ public void onAcknowledgement(RecordMetadata metadata, Exception exception);
 // 关闭拦截器
 public void close();
 ```
+- `onSend` 方法在 `send` 方法之后，消息序列化之前调用；可以在方法中修改消息的内容，但是会对后续的操作都有影响；方法中抛出的异常会被 catch 住而不会影响后续的处理
+- `onAcknowledgement` 方法在收到消息确认或者消息发生失败之后，callback 之前调用；方法运行在 I/O 线程，因此方法逻辑应尽量简单；方法中抛出的异常会被 catch 住而不会影响后续的处理
+
 生产者拦截器需要在创建生产者客户端实例时设置，在创建实例的配置中添加配置：
 ```java
 properties.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, "interceptor.class.name");

@@ -11,6 +11,9 @@ properties.put("key.deserializer", "key.deserializer.class.name");
 properties.put("value.deserializer", "value.deserializer.class.name");
 ```
 消费者客户端在消费消息后需要向集群提交消费位移，在多线程情况下不能保证消费位移的正确提交，因此消费者客户端不是线程安全的。
+```java
+KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties);
+```
 
 ## 主题订阅
 Kafka 采用发布/订阅模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
@@ -32,7 +35,7 @@ if(partitionInfos != null && partitionInfos.size() > 1){
     consumer.assign(Collections.singleton(new TopicPartition(topic, partitionInfos.get(0).partition)))
 }
 ```
-`KafkaConsumer` 订阅主题的方法需要传入回调参数 `ConsumerRebalanceListener`，在消费组中的消费者发生变化或者主题的分区数发生变化时，Kafka 会根据分区分配策略为每个订阅了主题的消费者重新分配消费分区，并且在消费分区发生变化时通过回调监听器来通知消费者客户端。`ConsumerRebalanceListener` 接口定义了两个方法：
+`KafkaConsumer` 订阅主题时可以传入回调参数 `ConsumerRebalanceListener`，在消费组中的消费者发生变化或者主题的分区数发生变化时，Kafka 会根据分区分配策略为每个订阅了主题的消费者重新分配消费分区，并且在消费分区发生变化时通过回调监听器来通知消费者客户端。`ConsumerRebalanceListener` 接口定义了两个方法：
 ```java
 // 消费者停止拉取消息之后调用，通常会提交或者存储 offset 来避免重复消费
 void onPartitionsRevoked(Collection<TopicPartition> partitions);
