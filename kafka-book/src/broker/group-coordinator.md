@@ -1,12 +1,8 @@
 # GroupCoordinator
 
-GroupCoordinator 是管理消费者组的组件，每个 Broker 上都会实例化一个 Coordinator。GroupCoordinator 负责消费者组相关的重要功能：
-- 处理 JoinGroupRequest 和 SyncGroupRequest 完成 ConsumerGroup 分区分配的工作
-- 通过 GroupMetadataManager 和内部 `__consumer_offsets` 维护 offset 信息，使得消费者变化时能够找回之前消费的 offset
-- 通过 MemberMetadata 记录 ConsumerGroup 相关信息，确保在 GroupCoordinator 异常时新的 GroupCoordinator 可以找到消费组的信息
+GroupCoordinator 是管理消费者组与 offset 的组件，每个 Broker 上都会实例化一个 Coordinator。每个消费者组都有一个对应的组协调器管理，当消费者组内的消费者发生变化时，组协调器会自动根据选定的分区策略进行重分区，组协调器还会管理消费者的 offset，保证当发生重分配时能够正确找回消费者的 offset。
 
-
-
+GroupCoordinator 维护的 `GroupMetadataManager` 中缓存了 `ConumerGroup` 元数据及其对应的 offset 信息 
 
 ## offset 管理
 
