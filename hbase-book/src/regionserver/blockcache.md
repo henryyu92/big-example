@@ -1,10 +1,8 @@
 ## BlockCache
 
-BlockCache 是 HBase 系统中用于提升读性能的缓存，每个 RegionServer 中只包含一个 `BlockCache`。
+BlockCache 是 HBase 用于提升读性能的缓存，每个 RegionServer 中只包含一个 `BlockCache`。RegionServer 在接收到客户端的查询请求时会先检查 `BlockCache` 中是否缓存有对应的 Block，如果有则直接从 Block 中读取对应的数据返回，否则需要从 HFile 中加载对应的 Block 并且缓存到 `BlockCache` 中。
 
-RegionServer 查询时首先检查 `BlockCache` 中是否存在，如果存在则直接读取，否则需要从 HFile 中加载对应的 Block 并且缓存到 `BlockCache` 中。
-
-`BlockCache` 以 Block 为缓存单位，每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K。
+`BlockCache` 以 Block 为缓存单位，每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K，Block 是组成 HFile 的基本单位。
 
 HBase 提供了两种不同的 `BlockCache` 实现：`LruBlockCache` 和 `BucketCache`。`LruBlockCache` 缓存的所有数据都在 JVM 堆内存中；`BucketCache` 则将数据缓存在堆外，通常在文件中。
 
@@ -25,6 +23,8 @@ LruBlockCache 使用三级缓存机制，：
 - `In-Memory access priority`：如果列簇设置为 `in-memory` ，则不管 Block 访问了多少次都会设置为当前优先级，在缓存根据 LRU 策略移除 Block 时此优先级的 Block 最后被移除，`In-Memory` 级别的缓存占缓存总量的 25%
 
 HRegion 在启动时默任启用了 `LruBlockCache`，缓存的总量由参数 `hfile.block.cache.size`  设置，表示占堆内存的比例，默认是 40%。
+
+
 
 ```
 
@@ -51,7 +51,15 @@ ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
 #### 缓存读取
 
 #### 缓存淘汰
-
+LruBlockCache 采用 lru 算法淘汰缓存，LruBlockCache 在后台运行了 Daemon 线程用于淘汰缓存，线程遍历整个
+```java
+if (evictionThread) {
+  this.evictionThread = new EvictionThread(this);
+  this.evictionThread.start(); // FindBugs SC_START_IN_CTOR
+} else {
+  this.evictionThread = null;
+}
+```
 
 
 ### BucketCache
