@@ -1,4 +1,4 @@
-# 元数据
+## 元数据
 
 Kafka 元数据指的是集群的信息，包括主题、分区、节点等信息，生产者客户端发送消息时根据元数据信息将消息发送到分区对应的 Broker 上。
 
@@ -75,7 +75,7 @@ public class Metadata extends Closeable {
 }
 ```
 
-## `Metadata` 更新
+### `Metadata` 更新
 
 `KafkaProducer` 在每次发送消息时都需要调用 `waitOnMetadata` 方法来获取集群的元数据信息，如果元数据不存在则会阻塞的等待元数据更新直到超时。
 ```java
@@ -141,7 +141,7 @@ Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 par
 
 ```
 
-## `Metadata` 失效
+### `Metadata` 失效
 
 
 ## 参考

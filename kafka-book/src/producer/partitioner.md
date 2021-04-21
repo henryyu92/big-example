@@ -1,4 +1,4 @@
-# 分区器
+## 分区器
 
 消息在发送到 `Broker` 之前需要确定消息的分区，客户端在创建消息 `ProducerRecord` 时如果指定了 `partition` 则消息会被发送到 `partition` 对应的 `Broker`，否则需要根据消息的 `key` 进行计算消息的分区。
 

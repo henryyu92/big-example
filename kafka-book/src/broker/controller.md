@@ -1,17 +1,16 @@
-# KafkaController
+## KafkaController
 
-Kafka 
+`KafkaController` 管理整个集群中的所有分区以及副本的状态。当分区的 leader 副本故障时由控制器负责为该分区选举新的 leader 副本；当分区 ISR 集合发生变化时由控制器负责通知所有 broker 更新其元数据信息；当使用 ```kafka-topics.sh``` 为 topic 增加分区时也是由控制器负责分区的重新分配。
 
-### 控制器
-Kafka 集群中会有一个或多个 broker，其中有一个 broker 会被选举为控制器(controller)，它负责管理整个集群中所有分区和副本的状态。当分区的 leader 副本故障时由控制器负责为该分区选举新的 leader 副本；当分区 ISR 集合发生变化时由控制器负责通知所有 broker 更新其元数据信息；当使用 ```kafka-topics.sh``` 为 topic 增加分区时也是由控制器负责分区的重新分配。
-#### 控制器的选举和异常恢复
+### Leader 选举
+
+Kafka 集群中有一个 Broker 会被选举为 KafkaController，选举工作依赖于 ZooKeeper。在任意时刻，集群中有且仅有一个控制器，每个 broker 在启动时会尝试去读取 /controller 节点下的 brokerid 的值，如果读取到的值不为 -1 则表示已经有其他 broker 节点成功选举为控制器，那么当前 broker 就会放弃尝试；如果 Zookeeper 中不存在 /controller 节点或者这个节点中的数据异常，那么就会尝试创建 /controller 节点，只有创建成功的节点才能成为控制器；每个 broker 都会在内存中保存当前控制器的 brokerid 的值。
+
 控制器的选举工作依赖于 ZooKeeper，成功选举为控制器的 broker 会在 ZooKeeper 中创建 ```/controller``` 临时节点，其中保存的内容为：
 ```json
 {"version":1,"brokerid":0,"timestamp":""}
 ```
 其中 brokerid 表示控制器对应的 broker 的 id，timestamp 表示选举为控制器的时间戳。
-
-在任意时刻，集群中有且仅有一个控制器，每个 broker 在启动时会尝试去读取 /controller 节点下的 brokerid 的值，如果读取到的值不为 -1 则表示已经有其他 broker 节点成功选举为控制器，那么当前 broker 就会放弃尝试；如果 Zookeeper 中不存在 /controller 节点或者这个节点中的数据异常，那么就会尝试创建 /controller 节点，只有创建成功的节点才能成为控制器；每个 broker 都会在内存中保存当前控制器的 brokerid 的值。
 
 ZooKeeper 中还有一个与控制器相关的 /controller_epoch 持久节点，节点中存放的是一个整型的 controller_epoch 值用于记录控制器发生变更的次数。controller_epoch 初始值为 1，当控制器发生变更时每新选出一个控制器就加 1。每个和控制器交互的请求都会携带 controller_epoch 字段，如果请求值小于控制器的 controller_epoch 则说明请求是向过期的控制器发送的那么这个请求会被认定为无效，如果请求值大于则说明已经有新的控制器当选。
 

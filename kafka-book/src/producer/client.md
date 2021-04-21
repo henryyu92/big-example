@@ -1,4 +1,4 @@
-# 客户端
+## 客户端
 `KafkaProducer` 表示 Kafka 的生产者客户端，在创建实例的时候需要指定集群地址以及消息的 key 和 value 的序列化方式。
 ```java
 // 指定集群地址，多个以 , 分割，不需要指定所有的机器
@@ -13,7 +13,7 @@ properties.put("value.serializer", "value_serializer_class_name");
 // todo KafkaProducerFactory
 ```
 
-## 发送消息
+### 发送消息
 Kafka 客户端发送的消息并不是单纯意义的消息，而是将消息包装后的 `ProducerRecord` 对象，其包含了多个消息相关的属性：
 ```java
 public class ProducerRecord<K, V> {
@@ -75,7 +75,7 @@ producer.send(record, (metadata, exception) -> {
 });
 ```
 
-## 脚本工具
+### 脚本工具
 
 Kafka 提供了通过控制台发送消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-producer.sh` 是 Kafka 提供的生产者脚本工具，可以向集群发送消息。
 

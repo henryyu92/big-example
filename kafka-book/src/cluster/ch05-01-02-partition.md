@@ -1,10 +1,10 @@
-# 分区管理
+## 分区管理
 
 Kafka 集群不会自动迁移副本，当集群中的某个节点异常时，节点上的分区副本会失效，当增加节点时集群的负载不会均衡到新的节点。
 
 Kafka 提供了脚本方式管理主题的分区，通过 `bin/kafka-reassign-partitions.sh` 工具可以在集群扩容或者节点异常时采用分区重新分配的方式迁移副本。
 
-## 分区重分配
+### 分区重分配
 
 `kafka-reassign-partition.sh` 脚本提供了 `--generate` 选项用于生成分区分配方案，在生成分区分配方案时需要通过 `--topic-to-move-json-file` 指定需要重新分配分区的主题，并且需要通过 `--broker-list` 选项指定参与分区重分配的 Broker。
 
@@ -62,7 +62,7 @@ bin/kafka-reassign-partitions.sh \
 --replica-alter-log-dirs-throttle 1024
 ```
 
-## 优先副本选举
+### 优先副本选举
 
 Kafka 在重新选举副本的 Leader 之后由于 Leader 副本分布不均匀导致集群负载不均衡，Kafka 通过优先副本(Prefer Replica)选举的方式使得集群的 Leader 副本尽可能分布均衡，从而时集群保持均衡。
 

@@ -1,4 +1,4 @@
-# 客户端
+## 客户端
 `KafkaConsumer` 表示 Kafka 消费者客户端，在创建实例的时候需要指定集群的地址，消息的 key 和 value 的反序列化方式，以及消费者所属的消费组。
 ```java
 // Broker 集群地址，不需要指定所有机器
@@ -15,7 +15,7 @@ properties.put("value.deserializer", "value.deserializer.class.name");
 KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties);
 ```
 
-## 主题订阅
+### 主题订阅
 Kafka 采用发布/订阅模型，即消费者在拉取消息之前需要订阅主题。`KafkaConsumer` 提供了三种重载的订阅主题的方法，不同的订阅方法不能混合使用，否则会抛出 `IllegalStateException` 异常：
 ```java
 // 以集合的方式订阅主题
@@ -45,7 +45,7 @@ void onPartitionsAssigned(Collection<TopicPartition> partitions);
 ```
 订阅了主题的消费者客户端可以通过 `KafkaConsumer#unsbuscribe()` 方法取消订阅，取消订阅后消费者拉取消息会抛出异常。取消订阅主题后消费者客户端的数量发生变化，会触发消费组内的消费者重新分配分区。
 
-## 消息消费
+### 消息消费
 
 消费者客户端订阅主题之后就可以从集群获取消息消费，消息的消费模式一般有两种：推模式和拉模式，推模式是服务端主动将消息推送给消费者，拉模式则是消费者主动向服务端发起请求拉取消息。
 
@@ -91,7 +91,7 @@ public class ConsumerRecord<K, V>{
 ```
 `KafkaConsumer` 提供了对消息消费的控制，`pause(partitions)` 和 `resume(partitions)` 方法可以控制暂停和回复拉取指定分区的消息，通过 `paused()` 方法可以查看暂停拉取消息的分区。
 
-## 并发消费
+### 并发消费
 `KafkaConsumer` 是非线程安全的，在对外的方法中会通过 `aquire()` 方法检测时候有多个线程操作同一个 `KafkaConsumer` 对象，如果发现有其他线程正在操作则会抛出 `ConcurrentModificationException`。
 
 消费者客户端和下游业务绑定，如果下游业务负载较重则会影响整个 Kafka 的吞吐量，此外堆积在 Broker 中的消息也有可能因为日志清理机制被清理从而导致消息丢失。
@@ -139,7 +139,7 @@ public static class RecordHandler implements Runnable {
 ```
 消息采用线程池的方式处理，因此不能保证消息消费的顺序性，另外由于消息处理的速率不同可能会导致在提交消费位移时有些消息尚未消费成功，可以借用窗口的思想，每次提交消费位移时保证小于当前 offset 的消息都已经消费。
 
-## 脚本工具
+### 脚本工具
 
 ```shell script
 # --bootstrap-server    集群地址

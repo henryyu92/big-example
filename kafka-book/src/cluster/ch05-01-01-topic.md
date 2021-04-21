@@ -1,8 +1,8 @@
-# 主题管理
+## 主题管理
 
 Kafka 提供了对集群中主题的管理，通过 `$KAFKA_HOME/bin/kafka-topics.sh` 脚本工具可以进行主题的创建、查看、修改、删除等操作。
 
-## 创建主题
+### 创建主题
 
 集群的配置参数 `auto.create.topics.enable` 默认为 true，也就是说生产者向不存在的主题发送消息或者消费者从不存在的主题拉取消息都会自动的创建对应的主题，为了避免创建未知的主题，通常会将参数设置为 false 禁止自动创建主题，而是通过脚本工具创建主题。
 
@@ -72,7 +72,7 @@ create /brokers/topics/topic-create-zk {"version":1,"partitions":{"2":[1,2],"1":
 # 指定主题参数
 create /config/topics/topic-create-zk {"version":1,"config":{"cleanup.policy":"compact","max.message.bytes":"10000"}}
 ```
-## 查看主题
+### 查看主题
 
 `kafka-topics.sh` 脚本工具提供了两种查看主题的方式： `--list` 指令查看所有的主题，`--describe` 指令查看指定的主题。
 ```shell
@@ -91,7 +91,7 @@ bin/kafka-topics.sh --describe --under-replicated-partitions --bootstrap-server 
 
 bin/kafka-topics.sh --describe --unavailable-partitions --bootstrap-server localhost:9092
 ```
-## 修改主题
+### 修改主题
 `kafka-topics.sh` 脚本的 `--alter` 指令可以修改已经创建的主题，Kafka 只支持增加分区而不支持减少分区，当修改一个不存在的 topic 时，使用 `--if-exists` 选项来忽略修改：
 ```shell
 bin/kafka-topics \
@@ -103,7 +103,7 @@ bin/kafka-topics \
 --partitions 3
 ```
 主题的修改特别是分区的修改会使得原有的数据受到很大的影响，如 producer 端根据 key 计算分区，消息的有序性、事务等变得很难保证，因此一般不建议修改分区。
-## 删除主题
+### 删除主题
 ```kafka-topics.sh``` 脚本的 `--delete` 指令可以用于删除主题，必须配置 ```delete.topic.enable``` 参数为 true 才能删除 topic，不能删除 Kafka 内部主题和不存在的主题：
 ```shell
 bin/kafka-topics \
@@ -124,9 +124,7 @@ rm -rf /<log.dir>/topic_delete
 ```
 删除主题操作是不可逆的，一旦删除之后对应的消息数据也会全部删除且不可恢复。
 
-## 主题参数
-
-
+### 主题参数
 
 主题的参数基本上在 broker 上都有对应的配置，如果创建主题时没有指定参数则使用 broker 对应参数的默认值。
 
