@@ -19,13 +19,16 @@ Raft 协议中每个节点在任意时刻会处于三种状态之一：leader、
 - candidate 节点在等待投票时收到其他节点发出的 AppendEntries 心跳消息，此时通过自己的 term 编号和心跳消息的 term 编号比较，如果自己编号较大则继续等待，否则承认 leader 已经选举成功，将自己转为 follower 状态
 - candidate 节点等待超时仍未收到多数选票或者 leader 心跳信息，则说明此轮 leader 选举失败，需要重新发起一轮选举
 
+leader 节点选出后会周期性的向 follower 结点发送心跳消息，follower 节点接收到心跳消息后会重置自己的超时时间。
+
 ### 日志复制
 
 主节点选举成功之后，所有的读写操作都是由主节点完成。主节点在完成数据变更后需要将变更的数据复制到所有 follower 节点。
 
-客户端提交的写命令会按顺序记录在 leader 的日志中，每条命令都包含 term 编号和顺序索引。leader 发送 AppendEntries 信息到所有的 follower，当大多数 follwer 节点返回成功时，leader 会同时做三件事：
+客户端请求包含由复制状态机执行的命令，leader 会将命令作为按顺序记录在日志中，每条命令都包含 term 编号和顺序索引。leader 向所有的 follower 发送 AppendEntries 消息，如果大多数
 
-- 将日志应用到本地的复制状态机
-- 通知所有的 follower 进行日志提交，然后应用到本地的复制状态机
+客户端提交的写命令会按顺序记录在 leader 的日志中，leader 发送 AppendEntries 信息到所有的 follower，只有大多数 follwer 节点返回成功时，leader 才会返回客户端成功。
+
+
 
 ### 安全性
