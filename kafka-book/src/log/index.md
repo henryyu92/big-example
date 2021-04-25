@@ -30,28 +30,17 @@ Kafka 索引文件通过 `MappedByteBuffer` 映射到内存中，通过二分查
 
 由于 `relativeOffset` 只占用 4 个字节，因此每个偏移量索引文件中最多只能记录 `Integer.MAX_VALUE` 个索引。
 
-Broker 在根据 offset 查找消息时，首先需要根据 offset 找到对应的 `LogSegment`
+Broker 在根据 offset 查找消息时，首先需要根据 offset 找到对应的 `LogSegment`，然后在 LogSegment 对应的偏移量索引文件中根据计算的 `relativeOffset` 查找消息的物理地址，最后根据物理地址在对应的 LogSegment 中顺序查找。
 
-broker 在根据 offset 查找消息时，首先根据 offset 找到包含消息的 LogSegment，然后通过偏移量索引找到消息对应的物理地址，之后根据物理地址在 LogSegment 中遍历找到。
-
-
-
-Kafka 使用 ```ConcurrentSkipListMap``` (跳跃表) 来保存 LogSegment，其中 key 是 LogSegment 的 baseOffset。```floorEntry``` 方法返回跳跃表中不大于查找消息的 offset 的最大 baseOffset 的 LogSegment，这样就能确定查找的消息所在的 LogSegment。
-
-Kafka 强制要求索引文件大小必须是索引项大小的整数倍，对偏移量索引文件而言，必须为 8 的整数倍。如果 broker 端的参数 ```log.index.size.max.bytes``` 配置不为 8 的整数倍会被自动调整为 8 的整数倍。
+Kafka 没有采用顺序查找的方式找到 offset 对应的 LogSegment，而是采用了跳跃表来快速查找，其中 key 是 LogSegment 的基准偏移量(第一个消息的 offset)，value 则是对应的 LogSegment。通过跳跃表查询可以快速定位到不大于查找的 offset 的最大基准偏移量的 LogSegment，即消息所在的 LogSegment。
 
 ### 时间戳索引
 
 时间戳索引 (TimeIndex) 中记录了消息的 timestamp 和消息的 offset 的对应关系，时间戳索引中的每个索引项占用 12 个字节，包含两部分内容：
-- timestamp：当前日志分段最大的时间戳，占用 8 字节
-- relativeOffset：时间戳对应的消息的相对偏移量，占用 4 字节
+- `timestamp`：当前日志分段最大的时间戳，占用 8 字节
+- `relativeOffset`：时间戳对应的消息的相对偏移量，占用 4 字节
 
-
-
-时间戳索引文件追加的索引项中的 timestamp 必须大于之前追加的索引项的 timestamp，如果参数 ```log.message.timestamp.type``` 设置为 ```LogAppendTime``` 则可以保证 timestamp 单调递增，如果设置为 ```CreateTime```，除非生产者在生产消息时能够指定单调递增的时间戳，否则时间戳索引无法保证会被写入。
-
-
-与偏移量索引文件相似，时间戳索引文件大小必须是索引项大小(12B)的整数倍，如果不满足也会进行裁剪。
+时间戳索引也是单调递增的，追加的索引项的 timestamp 必须大于之前追加的索引项的 timestamp，```log.message.timestamp.type``` 设置为 ```LogAppendTime``` 则可以保证 timestamp 单调递增；如果设置为 ```CreateTime```，除非生产者在生产消息时能够指定单调递增的时间戳，否则时间戳索引无法保证会被写入。
 
 偏移量索引 (OffsetIndex) 和时间戳索引 (TimeIndex) 增加索引项操作是同时进行的，但是偏移量索引项中的 relativeOffset 和时间戳索引项中的 relativeOffset 不一定是同一个值，因为写入偏移量索引的 offset 是消息集中最大的 offset，而写入时间戳索引的 offset 是消息集中 timestamp 最大的消息的 offset。
 

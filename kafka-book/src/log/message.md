@@ -7,10 +7,7 @@
 
 消息在 Kafka 中是以批量的方式传输，`RecordBatch` 定义了消息批量传输的格式，每个 `RecordBatch` 由定长的头信息和变长的 `Record` 信息组成。
 
-<center>
-
 ![Log](../img/records.png)
-</center>
 
 
 ```
