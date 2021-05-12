@@ -1,16 +1,23 @@
 ## BlockCache
 
-BlockCache 是 HBase 用于提升读性能的缓存，每个 RegionServer 中只包含一个 `BlockCache`。RegionServer 在接收到客户端的查询请求时会先检查 `BlockCache` 中是否缓存有对应的 Block，如果有则直接从 Block 中读取对应的数据返回，否则需要从 HFile 中加载对应的 Block 并且缓存到 `BlockCache` 中。
+`BlockCache` 是 HBase 用于提升读性能的缓存结构，RegionServer 读取 Block 时会首先检查该 Block 是否存在于 `BlockCache`，如果存在则直接读取出来，否则到 HFile 中加载对应的 Block 并缓存在 `BlockCache` 中。
 
-`BlockCache` 以 Block 为缓存单位，每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K，Block 是组成 HFile 的基本单位。
+`BlockCache` 中缓存的是 `Block`，是 HBase 中最小的数据读取单元，也就是数据从 HFile 中读取都是以 Block 为单位进行的。每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K，Block 是组成 HFile 的基本单位。
 
-HBase 提供了两种不同的 `BlockCache` 实现：`LruBlockCache` 和 `BucketCache`。`LruBlockCache` 缓存的所有数据都在 JVM 堆内存中；`BucketCache` 则将数据缓存在堆外，通常在文件中。
+`BlockCache` 是 RegionServer 级别的，也就是说每个 RegionServer 中只包含一个 `BlockCache`，并且在 RegionServer 启动时完成初始化。
 
 ```
 思考：
     1. BlockCache 是 RegionServer 级别，是不是粒度较大？为何不设计成 Region 级别？
     2. 缓存淘汰、内存管理、缓存容量、缓存监控实现？
 ```
+
+HBase 提供了两种不同的 `BlockCache` 实现：
+
+- `LruBlockCache` ：缓存数据在 JVM 堆内存中，可能会导致 Full GC
+-  `BucketCache`：将数据缓存在堆外，通常在文件中
+
+// todo
 
 ### LruBlockCache
 
@@ -46,11 +53,8 @@ HRegion 在启动时默任启用了 `LruBlockCache`，缓存的总量由参数 `
 ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
 ```
 
-#### 缓存写入
 
-#### 缓存读取
 
-#### 缓存淘汰
 LruBlockCache 采用 lru 算法淘汰缓存，LruBlockCache 在后台运行了 Daemon 线程用于淘汰缓存，线程遍历整个
 ```java
 if (evictionThread) {
@@ -114,11 +118,7 @@ HBase 使用 BucketAllocator 类实现对 Bucket 的组织管理：
 - HBase 在启动时就决定了 size 标签的分类，默认标签有 (4+1)K、(8+1)K、(16+1)K、...、(512+1)K。系统会首先从小到大遍历一次所有 size 标签，为每种 size 标签分配一个 Bucket，最后所有剩余的 Bucket 都分配最大的 size 标签
 - Bucket 的 size 标签可以动态调整，当某种 size 标签的 Bucket 用完之后其他空闲的 Bucket 就可以转换成为对应 size 的 Bucket，但是会至少保留一个该 size 的 Bucket
 
-#### 缓存写入
 
-#### 缓存读取
-
-#### 缓存淘汰
 
 BucketCache 中 Block 写入缓存以及从缓存中读取 Block 的流程主要包括 5 个模块：
 

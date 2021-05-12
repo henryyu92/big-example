@@ -4,7 +4,7 @@ HBase 基于 LSM 树实现，所有写入的数据都会写入 MemStore 中，�
 
 基于 LSM 树架构，HBase 将随机写转换为内存的随机写和磁盘的顺序写，使得写性能得到极大提升。
 
-MemStore 使用跳跃表结构保证在有序的情况下保证查询、插入操作的时间复杂度为 O(logN)。为了防止 MemStore 在 flush 之后产生过多的内存碎片，HBase 借鉴 TLAB (Thread-Local Allocation Buffer) 机制引入了 `MemStoreLAB` 来保存写入的数据，。
+MemStore 使用跳跃表结构保证在有序的情况下保证查询、插入操作的时间复杂度为 O(logN)。为了防止 MemStore 在 flush 之后产生过多的内存碎片，HBase 借鉴 TLAB (Thread-Local Allocation Buffer) 机制引入了 `MemStoreLAB` 来保存写入的数据。
 
 - 数据写入 MemStore 时会将写入的 KeyValue 复制到 Chunk 中并返回新的 Cell 对象引用 Chunk 中的 KeyValue
 - 返回的 Cell 对象会写入跳跃表结构中保证写入数据的顺序，新生成的 Cell 对象较写入的 KeyValue 对象小得多

@@ -6,9 +6,6 @@ Sharding 是一种数据扩容的方式，通过将数据以某种方式存储�
 ### Range Based
 
 
-### Round Robin
-
-
 ### Consistent Hash
 
 

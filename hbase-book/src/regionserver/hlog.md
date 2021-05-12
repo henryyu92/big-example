@@ -81,3 +81,4 @@ hbase.regionserver.hlog.write.thread=32
 - 每个 split worker 能开的 writer 线程个数，由 hbase.regionserver.hlog.splitlog.writer.thread 参数决定
 
 由于需要满足 Xceiver 的个数不能超过 HDFS 集群的总数，提高并发只能通过调大每个 RegionServer 上并行的 split worker 或者每个 worker 能开启的 writer 值；对于需要尽快恢复集群，只能控制故障 RegionServer 上需要切分的 HLog 的个数，这个值不能设置的太大，也不能设置的太小，太大会导致故障恢复较慢，太小会导致 MemStore 频繁的进行 flush 操作，影响性能。
+

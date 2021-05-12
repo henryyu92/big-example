@@ -9,3 +9,9 @@ TSO(TimestampOracle)，即中心授时，也就是有一个中心化的授时节
 ### 原子钟
 
 ### HLC
+
+
+
+
+
+https://www.jianshu.com/p/8500882ab38c

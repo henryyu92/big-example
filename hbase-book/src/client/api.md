@@ -118,6 +118,12 @@ HBase 提供的 `setFilter` 方法会覆盖之前设置的过滤器，当需要�
 FilterList filterList = new FilterList(filter1, filter2);
 ```
 
+分页问题：
+
+
+
+
+
 ### Admin
 
 Admin 操作提供了对 HBase 的管理，包括命名空间和表的管理，Compaction 的执行，Region 的迁移等。
