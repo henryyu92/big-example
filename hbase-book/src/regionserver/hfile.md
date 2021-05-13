@@ -6,6 +6,8 @@ HBase 采用 LSM 树架构，数据写入时先写入 MemStore，当数据写到
 
 ### HFile
 
+HFile 是 HBase 用于在 HDFS 中存储数据的文件格式。
+
 HBase 执行 flush 操作后将内存中的数据按照特定格式写入 HFile 文件。MemStore 中 KV 在 flush 成 HFile 时首先构建 Scanned Block 部分，即 KV 写入之后首先构建 Data Block 并依次写入文件，形成 Data Block 的过程中也会依次构建形成 Leaf index Block、Bloom Block 并依次写入文件。一旦 MemStore 中所有 KV 都写入完成，Scanned Block 部分就构建完成。
 
 
@@ -21,6 +23,8 @@ ${HBASAE_HOME}/bin/hbase file -v -f hdfs://path_of_hfile
 
 
 #### Block
+
+ `Block`是 HBase 中最小的数据读取单元，每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K，Block 是组成 HFile 的基本单位。
 
 
 

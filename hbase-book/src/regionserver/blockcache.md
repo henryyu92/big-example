@@ -1,10 +1,8 @@
 ## BlockCache
 
-`BlockCache` 是 HBase 用于提升读性能的缓存结构，RegionServer 读取 Block 时会首先检查该 Block 是否存在于 `BlockCache`，如果存在则直接读取出来，否则到 HFile 中加载对应的 Block 并缓存在 `BlockCache` 中。
+`BlockCache` 是 HBase 用于提升读性能的缓存结构，RegionServer 读取 Block 时会首先检查该 Block 是否存在于 `BlockCache`，如果存在则直接读取出来，否则到 HFile 中加载缓存在 `BlockCache` 中。
 
-`BlockCache` 中缓存的是 `Block`，是 HBase 中最小的数据读取单元，也就是数据从 HFile 中读取都是以 Block 为单位进行的。每个 Block 由物理上相邻的 K-V 数据组成，默认大小为 64K，Block 是组成 HFile 的基本单位。
-
-`BlockCache` 是 RegionServer 级别的，也就是说每个 RegionServer 中只包含一个 `BlockCache`，并且在 RegionServer 启动时完成初始化。
+`BlockCache` 是 RegionServer 级别的，即每个 RegionServer 中只包含一个 `BlockCache`，并且在 RegionServer 启动时完成初始化。
 
 ```
 思考：
@@ -15,45 +13,43 @@
 HBase 提供了两种不同的 `BlockCache` 实现：
 
 - `LruBlockCache` ：缓存数据在 JVM 堆内存中，可能会导致 Full GC
--  `BucketCache`：将数据缓存在堆外，通常在文件中
+-  `BucketCache`：将数据缓存在堆外，通常以 mmap 的形式存放在文件中
 
-// todo
+启用了 `BucketCache` 后，HBase 就会同时使用 `LruBlockCache` 和 `BucketCache` 作为缓存，此时所有的 `DATA` 块存放在 `BucketCache` 而 `INDEX` 块和 `BLOOM` 块等元数据信息存放在 `LruBlockCache`，并且由 `CombinedBlockCache` 进行管理缓存在二者的 Block 的移动。 
 
 ### LruBlockCache
 
-LruBlockCache 是 HBase 默认的缓存算法，将所有数据都放入 JVM 中管理。LruBlockCache 使用 ConcurrentHashMap 管理 blockKey 到 Block 的映射，查询时只需要根据 blockKey 就可以获取到对应的 Block。
+`LruBlockCache` 是 HBase 默认的缓存实现，使用 `ConcurrentHashMap` 管理 blockKey 到 Block 的映射，查询时只需要根据 blockKey 就可以获取到对应的 Block。
 
-LruBlockCache 使用三级缓存机制，：
+`LruBlockCache` 采用 `LRU` 策略缓存数据，它包含三个级别的缓存优先级：
 
-- `Single access priority`：Block 从 HDFS 加载时拥有的优先级，在 Block 进行 LRU 策略移除时优先移除此优先级的 Block，`Single` 级别的缓存占缓存总量的 25%
-- `Multi access priority`：访问 `Single access priority` 中的 Block 时，则调整 Block 到当前优先级，`Multi` 级别的缓存占缓存总量的 50%
-- `In-Memory access priority`：如果列簇设置为 `in-memory` ，则不管 Block 访问了多少次都会设置为当前优先级，在缓存根据 LRU 策略移除 Block 时此优先级的 Block 最后被移除，`In-Memory` 级别的缓存占缓存总量的 25%
+- `Single access priority`：Block 首次从 HDFS 加载时拥有的优先级，在 Block 进行 LRU 策略移除时优先移除此优先级的 Block，`Single` 级别的缓存占缓存总量的 25%
+- `Multi access priority`：`single` 级别中的 Block 再次命中时则会调整为此优先级，在移除 Block 时作为第二优先级，`Multi` 级别的缓存占缓存总量的 50%
+- `In-Memory access priority`：如果列簇设置为 `in-memory` ，则不管 Block 访问了多少次都会设置为此优先级，在缓存根据 LRU 策略移除 Block 时此优先级的 Block 最后被移除，`In-Memory` 级别的缓存占缓存总量的 25%
 
-HRegion 在启动时默任启用了 `LruBlockCache`，缓存的总量由参数 `hfile.block.cache.size`  设置，表示占堆内存的比例，默认是 40%。
-
-
+HRegion 在启动时默任启用了 `LruBlockCache`，缓存的总量由参数 `hfile.block.cache.size`  设置，表示占堆内存的比例，默认是 40%。通过下面的公式可以计算缓存可用的内存：
 
 ```
-
+number_of_region_server * heap_size * hfile.block.cache.size * 0.99
 ```
 
-`LruBlockCache` 中存储的 Block 从 HFile 中加载，因此除了缓存 `Data Block` 之外还会存储其他的信息：
+`LruBlockCache` 中存储的 Block 从 HFile 中加载，因此除了缓存数据之外还会存储其他的信息：
 
-- `hbase:meta` 和 `hbase:namespace` 等元数据信息强制存储在 BlockCache 中，并且默认是 `In-Memory` 级别
+- `hbase:meta` 和 `hbase:namespace` 等元数据信息强制存储在 BlockCache 中，并且默认是 `In-Memory` 级别，当 Region 数量较多时可能会占用较大缓存空间
 - `Index Block` 是 HFile 中的索引信息，利用索引信息可以不加载整个 HFile 而读取到数据 
 - `Bloom Block`  是块的布隆过滤器信息，可以快速判断查找的数据是否不在当前块
+- 列数据对应的 key 信息(`row key`, `family qualifier`, `timestamp`)，因为 HBase 数据存储时会将对应的 key 一起作为 KeyValue 存储
 
 `LruBlockCache` 使用堆内存作为缓存，频繁的触发 lru 淘汰策略移除缓存的 Block 会导致大量的垃圾回收，因此对于特定的应用场景需要关闭缓存功能：
 
-- 完全随即读取，这种情况下缓存的命中率几乎为 0
+- 完全随即读取，这种情况下短时间内缓存的命中率几乎为 0
+- 映射到表，每行只会读取一次
 
-`BlockCache` 总是会缓存 `Index Block` 和 `Bloom Block`，因此在访问随即数据时可以只缓存元数据信息而不缓存数据，此时只需要在创建表的时候禁用列簇的 BlockCache 功能：
+`BlockCache` 总是会缓存 `Index` 块和 `Bloom`块，因此在访问随即数据时可以只缓存元数据信息而不缓存数据，此时只需要在创建表的时候禁用列簇的 BlockCache 功能：
 
 ```java
 ColumnFamilyDescriptorBuilder.setBlockCacheEnabled(false);
 ```
-
-
 
 LruBlockCache 采用 lru 算法淘汰缓存，LruBlockCache 在后台运行了 Daemon 线程用于淘汰缓存，线程遍历整个
 ```java
@@ -68,15 +64,13 @@ if (evictionThread) {
 
 ### BucketCache
 
-`BucketCache` 通常和 `LruBlockCache` 共同作用，并且由 `CombinedBlockCache` 管理，其工作方式是将 `Index Block` 和 `Bloom Block` 缓存在 `LruBlockCache` ，而将 `Data Block` 缓存在 `BucketCache`。
-
-BucketCache 没有使用 JVM 内存管理算法来管理缓存，因此大大降低了因为出现大量内存碎片导致 Full GC 发生的风险。
+`BucketCache` 是通过 `CombinedBlockCache` 来管理部署的，通常会和 `LruBlockCache` 联合使用，并将 `DATA` 块缓存在 `BucketCache` 中。
 
  `BucketCache` 通过不同配置方式可以工作在三种模式下：
 
-- `offheap`：使用堆外内存缓存 Block
--  `file`：使用文件系统来缓存 Block
-- `mmaped file`： 使用文件映射的方式将 Block 缓存在文件中
+- `offheap`：使用堆外内存作为缓存
+-  `file`：使用文件作为缓存，在需要较大缓存空间时适用
+- `mmaped file`：使用文件映射的方式将文件作为缓存
 
 通过在配置文件 `hbase.site.xml` 中设置参数 `hbase.bucketcache.ioengine` 可以配置 `BucketCache` 在三种模式之间切换：
 
@@ -101,6 +95,8 @@ BucketCache 没有使用 JVM 内存管理算法来管理缓存，因此大大降
   <value>4196</value>
 </property>
 ```
+
+
 
 `BucketCache` 使用 `BucketAllocator` 来管理 Bucket，并且通过 `ramCache` 和 `backingMap` 来判断 Block 是否在缓存中。
 

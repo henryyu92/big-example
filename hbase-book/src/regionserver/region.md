@@ -20,6 +20,8 @@ HBase 为每个 Region 维护了一个状态，并将 Region 的状态持久化�
 
 ### Region 分裂
 
+`RegionServer` 接收到的数据存满 `MemStore` 后会触发刷盘生成文件，`RegionServer` 会将多个刷盘形成的文件压缩成大文件，每次刷盘或者 compaction 操作都会时 Region 中的数据发生变化，`RegionServer` 根据指定的分裂策略决定是否需要分裂 `Region`。
+
 Region 分裂是实现分布式可扩展的基础，HBase 定义多种分裂策略，当 Region 满足配置的分裂策略的条件时就会触发分裂操作。
 
 #### 分裂策略
