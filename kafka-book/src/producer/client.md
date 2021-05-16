@@ -14,7 +14,7 @@ properties.put("value.serializer", "value_serializer_class_name");
 ```
 
 ### 发送消息
-Kafka 客户端发送的消息并不是单纯意义的消息，而是将消息包装后的 `ProducerRecord` 对象，其包含了多个消息相关的属性：
+Kafka 客户端发送的消息是将需要发送的数据包装后的 `ProducerRecord` 对象，其包含了多个消息相关的属性：
 ```java
 public class ProducerRecord<K, V> {
     // 消息的主题
@@ -62,7 +62,7 @@ public final class RecordMetadata {
 }
 ```
 
-生产者客户端在发送消息的过程中会产生两类异常：可重试异常和不可重试异常。对于可重试异常，如果在创建生产者客户端时配置 `retries(默认 0)` 参数则在发生异常时会自动重试，对于不可重试异常则会直接抛出。Kafka 生产者客户端保证发送到同一个分区的消息是有序的，并且 callback 也是分区有序的:
+生产者客户端在发送消息的过程中会产生两类异常：可重试异常和不可重试异常。对于可重试异常，如果在创建生产者客户端时配置 `retries(默认 0)` 参数则在发生异常时会自动重试，对于不可重试异常则会直接向上层抛出。Kafka 生产者客户端保证发送到同一个分区的消息是有序的，并且 callback 也是分区有序的:
 ```java
 producer.send(record, (metadata, exception) -> {
     

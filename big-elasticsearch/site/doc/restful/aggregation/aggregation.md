@@ -15,3 +15,9 @@ GET /bank/_search
 }
 ```
 
+
+
+- `Bucket Aggregation` 满足特定条件的文档的集合
+- `Metric Aggregation` 数学运算，可以对文档字段进行统计分析
+- `Pipeline Aggregation` 对其他的集合结果进行二次聚合
+- `Matrix Aggregation` 支持多个字段的操作并提供一个结果矩阵

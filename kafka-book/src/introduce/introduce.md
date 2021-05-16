@@ -1,6 +1,6 @@
 ## Kafka 介绍
 
-Kafka 是一个高性能、高吞吐的分布式事件流平台，通过发布/订阅(`Publish/Subscribe`) 的方式将数据从一个系统传输到另一个系统。Kafka 提供了数据持久化的功能，并通过多副本的方式保证数据的可靠，此外 Kafka 还能保证消息的顺序性以及消息的回溯消费。
+Kafka 是一个高性能、高吞吐的分布式事件流平台，通过发布/订阅的方式将数据从一个系统传输到另一个系统。Kafka 提供了数据持久化的功能，并通过多副本的方式保证数据的可靠，此外 Kafka 还能保证消息的顺序性以及消息的回溯消费。
 
 - **消息持久化**：Kafka 依赖文件系统持久化消息，数据的持久化采用对文件的追加实现，时间复杂度为 O(1)，因此即使是存储海量的消息也不会影响性能
 - **高吞吐量**：Kafka 顺序写数据的同时采用零拷贝(zero-copy)技术，采用 sendFile() 函数在内核中操作两个文件描述符之间直接传递数据而避免了内核缓冲区与用户缓冲区之间的数据拷贝，同时 Kafka 还支持数据压缩和批量发送以及多分区是的 Kafka 的吞吐量达到每秒百万级别
@@ -82,11 +82,11 @@ Kafka 集群由生产者、消费者、Broker 和 ZooKeeper 组成，其中生�
 
 Kafka 集群启动时会读取 `$KAFKA_HOME/config/server.properties` 文件中设置的参数，通过对这些参数的调优能够使得 Kafka 集群获得更好的性能。
 
-- **`zookeeper.connect`**：指定 broker 需要连接的 ZooKeeper 集群的地址(包含端口号)，使用逗号 (,) 隔开集群的多个节点地址。在集群地址上增加一个 chroot 路径 (如 `localhost:2181/kafka`) 指定 Kafka 数据存储的根路径，可以使得 ZooKeeper 能够以多租户的方式为不同的业务提供服务
-- **`listeners`**：指定 broker 监听客户端连接的地址列表，格式为 `protocol://hostname:port`，只有指定的客户端才能连接到 broker，默认值为 null 表示任意客户端可以连接。Kafka 支持三种协议：PLAINTEXT、SSL、SASL_SSL
-- **`broker.id`**：指定当前 broker 的唯一标识，默认为 -1，即在集群启动时默认生成
-- **`log.dir`**：指定 broker 存储数据的地址，默认为 `/tmp/kafak-logs`
-- **`message.max.bytes`**：指定 broker 能接收的消息的最大值，默认为 1000012，超过指定大小的消息被发送到 broker 时会抛出 `RecordTooLargeException`
+- `zookeeper.connect`：指定 broker 需要连接的 ZooKeeper 集群的地址(包含端口号)，使用逗号 (,) 隔开集群的多个节点地址。在集群地址上增加一个 chroot 路径 (如 `localhost:2181/kafka`) 指定 Kafka 数据存储的根路径，可以使得 ZooKeeper 能够以多租户的方式为不同的业务提供服务
+- `listeners`：指定 broker 监听客户端连接的地址列表，格式为 `protocol://hostname:port`，只有指定的客户端才能连接到 broker，默认值为 null 表示任意客户端可以连接。Kafka 支持三种协议：PLAINTEXT、SSL、SASL_SSL
+- `broker.id`：指定当前 broker 的唯一标识，默认为 -1，即在集群启动时默认生成
+- `log.dir`：指定 broker 存储数据的地址，默认为 `/tmp/kafak-logs`
+- `message.max.bytes`：指定 broker 能接收的消息的最大值，默认为 1000012，超过指定大小的消息被发送到 broker 时会抛出 `RecordTooLargeException`
 
 https://www.cnblogs.com/answerThe/p/11267129.html
 

@@ -1,6 +1,6 @@
 ## 消息发送
 
-生产者客户端采用异步的方式发送消息，消息发送的流程是由两个线程协调完成，主线程负责将消息经拦截器、序列化器以及分区器等处理后缓存到 `RecordAccumulator`，Sender 线程则不断循环的从 `RecordAccumulator` 中取出消息发送到对应的 Broker。
+生产者客户端采用异步的方式发送消息，主线程负责将经过拦截器、序列化器以及分区器等处理后的消息缓存到 `RecordAccumulator`，Sender 线程则不断循环的从 `RecordAccumulator` 中取出消息发送到对应的 Broker。
 
 ```flow
 producer=>start: KafkaProducer
@@ -11,8 +11,9 @@ cluster=>end: Broker
 producer(right)->accumulator(right)->sender(right)->cluster
 ```
 
-## `RecordAccumulator`
-主线程发送的消息缓存在 `RecordAccumulator` 以便可以批量的发送到 Broker，`RecordAccumulator` 定义了两个重要的属性用于缓存的管理：
+### RecordAccumulator
+`RecordAccumulator` 缓存主线程发送的消息以便可以批量的发送到 Broker，`RecordAccumulator` 定义了两个重要的属性用于缓存的管理：
+
 ```java
 // 管理缓存内存空间
 private final BufferPool free;
@@ -22,12 +23,14 @@ private final ConcurrentMap<TopicPartition, Deque<ProducerBatch>> batches;
 - `BufferPool` 管理 `RecordAccumulator` 缓存的内存空间，空间大小由客户端参数 `buffer.memory` 配置，默认 32M，当缓存空间不足时则会阻塞，阻塞时间由客户端参数 `max.block.ms` 控制，默认 60s。
 - `batches` 为每个分区维护了一个双端队列，缓存的消息会直接追加到队尾的 `ProducerBatch` 中，如果 `ProducerBatch` 未创建或者已经满了则创建新的 `ProducerBatch` 并加入队尾。
 
-主线程缓存消息的 `Accumulator` 时先根据消息的分区获取对应的双端队列，然后从双端队列的尾部获取 `ProducerBatch` 并尝试缓存：
+主线程缓存消息到 `RecordAccumulator` 时先根据消息的分区获取对应的双端队列，然后从双端队列的尾部获取 `ProducerBatch` 并尝试缓存：
 ```java
-private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers,
-                                     Callback callback, Deque<ProducerBatch> deque) {
+private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value,
+        Header[] headers, Callback callback, Deque<ProducerBatch> deque) {
+    // 获取双端队列的尾部 Batch
     ProducerBatch last = deque.peekLast();
     if (last != null) {
+        // 消息追加到 ProducerBatch 中
         FutureRecordMetadata future = last.tryAppend(timestamp, key, value, headers, callback, time.milliseconds());
         if (future == null)
             last.closeForRecordAppends();
@@ -48,12 +51,12 @@ buffer = free.allocate(size, maxTimeToBlock);
 
 Kafka 将消息合并为 `ProducerBatch` 发送，这样可以减少网络请求的次数从而提升整体的吞吐，但是如果客户端在 `RecordBatch` 未发送到 `Broker` 前发生故障可会导致消息丢失。
 
-### `ProducerBatch`
+### ProducerBatch
 
-### `BufferPool`
+### BufferPool
 
 
-## Sender
+### Sender
 
 主线程将消息缓存到 `RecordAccumulator` 后立即返回，Sender 线程负责将消息批量的发送到对应的 Broker。Sender 线程在 `KafkaProducer` 初始化的时候创建
 ```java
@@ -62,7 +65,7 @@ String ioThreadName = NETWORK_THREAD_PREFIX + " | " + clientId;
 this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
 this.ioThread.start();
 ```
-Sender 线程从 RecordAccumulator 中获取缓存的 ProducerBatch 之后将 <TopicPartition, Deque<ProducerBatch>> 数据结构的消息转换为 <Node, List<ProducerBatch>> 数据结构的消息，其中 Node 表示 broker 节点。转换完成之后 Sender 还会进一步封装成 <Node, Request> 的形式，其中 Request 就是发送消息的请求 ProduceRequest，在发送消息之前 Sender 还会将请求保存到 ```Map<NodeId, Deque<Request>>``` 数据结构的 InFlightRequests 缓存已经发送请求但是没有收到响应的请求，通过 ```max.in.flight.requests.per.connection``` 控制与 broker 的每个连接最大允许未响应的请求数，默认是 5，如果较大则说明该 Node 负载较重或者网络连接有问题。
+Sender 线程从 RecordAccumulator 中获取缓存的 ProducerBatch 之后将 `<TopicPartition, Deque<ProducerBatch>>` 数据结构的消息转换为 `<Node, List<ProducerBatch>>` 数据结构的消息，其中 Node 表示 broker 节点。转换完成之后 Sender 还会进一步封装成 `<Node, Request>` 的形式，其中 Request 就是发送消息的请求 ProduceRequest，在发送消息之前 Sender 还会将请求保存到 ```Map<NodeId, Deque<Request>>``` 数据结构的 InFlightRequests 缓存已经发送请求但是没有收到响应的请求，通过 ```max.in.flight.requests.per.connection``` 控制与 broker 的每个连接最大允许未响应的请求数，默认是 5，如果较大则说明该 Node 负载较重或者网络连接有问题。
 
 通过 InFlightRequest 可以得到 broker 中负载最小的，即 InFlightRequest 中未确认请求数最少的 broker，称为 leastLoadedNode
 

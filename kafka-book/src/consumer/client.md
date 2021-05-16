@@ -32,7 +32,8 @@ assign(Collection<TopicPartition> partitions)
 // 主题的分区信息
 List<PartitionInfo> prititionInfos = consumer.partitionsFor(topic);
 if(partitionInfos != null && partitionInfos.size() > 1){
-    consumer.assign(Collections.singleton(new TopicPartition(topic, partitionInfos.get(0).partition)))
+    consumer.assign(Collections.singleton(
+        new TopicPartition(topic, partitionInfos.get(0).partition)))
 }
 ```
 `KafkaConsumer` 订阅主题时可以传入回调参数 `ConsumerRebalanceListener`，在消费组中的消费者发生变化或者主题的分区数发生变化时，Kafka 会根据分区分配策略为每个订阅了主题的消费者重新分配消费分区，并且在消费分区发生变化时通过回调监听器来通知消费者客户端。`ConsumerRebalanceListener` 接口定义了两个方法：
@@ -92,7 +93,7 @@ public class ConsumerRecord<K, V>{
 `KafkaConsumer` 提供了对消息消费的控制，`pause(partitions)` 和 `resume(partitions)` 方法可以控制暂停和回复拉取指定分区的消息，通过 `paused()` 方法可以查看暂停拉取消息的分区。
 
 ### 并发消费
-`KafkaConsumer` 是非线程安全的，在对外的方法中会通过 `aquire()` 方法检测时候有多个线程操作同一个 `KafkaConsumer` 对象，如果发现有其他线程正在操作则会抛出 `ConcurrentModificationException`。
+`KafkaConsumer` 是非线程安全的，方法中通过 `aquire()` 方法检测是否只有一个线程在操作，如果发现有其他线程正在操作则会抛出 `ConcurrentModificationException`。
 
 消费者客户端和下游业务绑定，如果下游业务负载较重则会影响整个 Kafka 的吞吐量，此外堆积在 Broker 中的消息也有可能因为日志清理机制被清理从而导致消息丢失。
 
@@ -102,7 +103,9 @@ public class ConsumerThread<K,V> implements Runnable {
   
   private final KafkaConsumer<K, V> consumer;
 
-  public ConsumerThread(String broker, String group, Collection<String> topics, K keyDeserializer, V valueDeserializer){
+  public ConsumerThread(String broker, String group, Collection<String> topics, 
+                        K keyDeserializer, V valueDeserializer){
+      
     Properties properties = new Properties();
     properties.setProperty("bootstrap.servers", broker);
     properties.setProperty("group.id", group);
@@ -140,6 +143,8 @@ public static class RecordHandler implements Runnable {
 消息采用线程池的方式处理，因此不能保证消息消费的顺序性，另外由于消息处理的速率不同可能会导致在提交消费位移时有些消息尚未消费成功，可以借用窗口的思想，每次提交消费位移时保证小于当前 offset 的消息都已经消费。
 
 ### 脚本工具
+
+Kafka 提供了通过控制台消费消息的脚本工具，`${KAFKA_HOME}/bin` 目录下的 `kafka-console-consumer.sh` 是 Kafka 提供的消费者脚本工具，可以订阅主题并消费对应分区的消息。
 
 ```shell script
 # --bootstrap-server    集群地址
