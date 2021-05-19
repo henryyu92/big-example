@@ -58,7 +58,7 @@ Kafka 将消息存储在磁盘中，为了控制磁盘占用空间的不断增�
 
 Kafka 在启动时会启动 LogManager 用于日志文件的管理，LogManager 启动时创建 ```kafka-log-retention``` 线程用于周期性的 (```log.retention.check.interval.ms```，默认 300000) 检测不符合保留条件的日志文件，并且创建了 LogCleaner 用于 Log Compaction。
 
-### Log Retention
+#### Log Retention
 
 基于 Retention 策略的日志清理会删除掉不符合保留条件的 LogSegment，清理条件包括 LogSegment 中消息的保留时间超过阈值、LogSegment 对应的日志文件大小超过阈值 和 ```baseOffset``` 小于 ```logStartOffset``` 的 LogSegment。
 
@@ -215,18 +215,21 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 }
 ```
 
-### Log Compaction
+#### Log Compaction
 
-<center>
-
-
-![Log Compaction](D:/nothing/big-example/kafka-book/src/img/log-compaction.png)
-</center>
+日志的 compaction 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时指定是否开启，默认情况下所有的主题都是开启的。
 
 
-Log Compaction 清理有重复 key 的消息，只保留最新的消息。开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
 
-Kafka LogMananger 在启动时会启动 LogCleaner，并在启动时创建 numThreads (参数 ```log.cleaner.threads```
+![Log Compaction](../img/log-compaction.png)
+
+
+
+
+
+开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
+
+`LogMananger` 在启动时会启动 LogCleaner，并在启动时创建 numThreads (参数 ```log.cleaner.threads```
 设置，默认 1) 个 CleanerThread 线程用于执行 LogComapction。
 
 在 ```CleanThread``` 的 ```doWork``` 方法中先通过 CleanManager 获取可以 Compact 的 Log，然后执行 Compact 操作，如果 Compact 失败则采取回退算法休眠：
@@ -291,3 +294,11 @@ Log Compaction 执行过后的日志分段的大小会比原先的日志分段�
 Log Compaction 过程中会将每个日志分组中需要保留的消息复制到一个以 .clean 为后缀的临时文件中，此临时文件以当前日志分组中第一个日志分段的文件命名，如 00000000000000000000.log.clean。Log Compaction 之后将 .clean 的文件修改为 .swap 后缀的文件，然后删除原本的日志文件，最后把文件的 .swap 后缀去掉
 
 Log Compaction 执行前后日志分段中的每条消息的偏移量和写入时的偏移量保持一致，Log Compaction 会生成新的日志分段文件，日志分段中每条消息的物理地址会重新按照新文件来组织。Log Compaction 执行之后的偏移量不再是连续的，但是并不影响日志的查询。
+
+
+
+
+
+https://segmentfault.com/a/1190000007922290
+
+https://www.jianshu.com/p/59f1acb32832?utm_campaign=maleskine&utm_content=note&utm_medium=seo_notes&utm_source=recommendation

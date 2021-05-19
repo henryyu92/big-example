@@ -1,14 +1,99 @@
 ## 文档
 
+`Elasticsearch` 提供了操作文档的 API
+
 ### 单文档
 
-#### 新增文档
+单文档 API 提供了对单个文档的操作
+
+#### 索引文档
+
+索引文档 API 向指定的索引添加 `JSON` 格式的文档，如果文档已经存在则更新文档并且增加文档的版本号。
+
+```
+PUT /<target>/_doc/<id>
+
+POST /<target>/_doc/
+
+PUT /<target>/_create/<id>
+
+POST /<target>/_create/<id>
+```
+
+使用 `PUT` 方法需要指定文档 ID，而使用 `POST` 方法会自动生成 ID，如果索引不存在则会在创建文档的时候自动创建。
+
+使用 `_create` 则明确表示创建文档，如果文档已经存在则会返回错误，使用 `_doc` 时如果文档不存在会自动创建文档，如果文档存在则会删除文档后重新创建文档(文档字段会发生变化)并且文档版本号加 1。
 
 #### 获取文档
 
-#### 更新文档
+使用 `GET` 方法获取索引中指定文档的源，使用 `HEAD` 方法验证文档是否存在。使用 `_source` 可以指定只返回文档的源。
+
+```sh
+GET <index>/_doc/<id>
+
+Head <index>/_doc/<id>
+
+GET <index>/_source/<id>
+
+HEAD <index>/_source/<_id>
+```
+
+默认情况下获取文档是实时的，不受索引 `refresh` 的影响。
 
 #### 删除文档
 
+文档删除 API 使用 `DELETE` 方法删除指定索引的指定文档。文档删除时需要保证上次对文档的修改已经分配了序列号，否则会导致 `VersionConflictException`。
+
+```sh
+DELETE /<index>/_doc/<id>
+```
+
+索引的每个文档都有版本控制，对文档的每个写操作都会使得版本号递增，删除文档时可以指定文档的版本来确保需要删除的文档被删除并且没有更改。
+
+删除文档不会导致文档数据立即删除，而是会保留一段时间用于并发控制，保留的时间由参数 `index.gc_deltes` 设置，默认是 60s。
+
 ### 多文档
 
+`Elasticsearch` 提供了批量操作文档的 API
+
+#### Multi get
+
+使用 `mget` 可以从多个索引中获取多个文档，如果查询请求中指定了索引则只会获取指定索引的文档。
+
+```sh
+# 指定文档
+GET /my-index-001/_mget
+{
+	"docs":{
+		"type": "_doc",
+		"_id": "1"
+	}
+}
+
+# 不指定文档
+GET /_mget
+{
+	"docs":[
+		{
+			"_index": "my-index-001",
+			"_id": "1"
+		},
+		{
+			"_index": "my-index-001",
+			"_id": "2"
+		}
+	]
+}
+```
+
+
+
+#### Bulk
+
+批量操作 API 
+
+#### Delete by query
+
+#### Update by query
+
+#### Reindex
