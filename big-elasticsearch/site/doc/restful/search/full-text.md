@@ -79,3 +79,6 @@ GET /my-index-001/_search
 ```
 
  
+
+### Simple query string
+

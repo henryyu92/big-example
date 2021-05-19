@@ -1,27 +1,56 @@
-## PacificA 算法
+## PacificA
 
 PacificA 算法是一种用于日志复制系统的分布式一致性算法。该算法有几个特点：
 
-- 强一致性，任意时刻读取到的数据都是最新数据
-- 引入额外的一致性组件维护 Configuration
-- 少数 Replica 可用时仍可以写入
+- 配置管理和数据管理分离，配置管理需要引入其他算法来保证数据一致性
+- 任意时刻读取到的数据都是最新的数据
+- 每个副本都有全量的数据，只要有一个副本可用就可以保证读写
 
-PacificA是一个读写都满足强一致的算法，它通过三个不变式保证了读写的primary的唯一性，读写的强一致性，故障恢复的可靠性。
+ParcificA 由两部分组成：存储集群和配置管理集群。
 
-它把数据的一致性和配置的一致性分开，使用额外的一致性组件（Configuration Manager）维护配置的一致性，结合lease机制保证了Primary Invariant，使得在同一时刻有且仅有一个primary。 update操作时，要求所有的secondary均prepare当前update，primary commit当前update，保证了Committed Invariant, 使得读操作可以获取到最新数据，primary故障时，secondary也有全量的数据。
-
-故障恢复机制保证了当secondary被选为primary时，其commit包含之前primary或secondary的commit，保证了Reconfiguration Invariant，使得在故障恢复后数据不会有丢失。
+- 存储集群：负责系统数据的读取和更新，通过多副本方式保证数据的可靠性和可用性
+- 配置管理集群：维护副本信息，包括副本的参与结点、主副本结点、当前副本的版本等，需要通过 Paxos 协议保证数据的一致性
 
 ### 名词
 
-- `Replica Group`：互为副本的数据集合称为  `Replica Group`，每个副本都是 Replica，其中只有一个是 Primary，其余都是  Secondary
-- `Configuration`：`Replica Group` 的元数据，描述了当前副本组的信息，如副本集合、primary 副本等
-- `Configuration Version`：Configuration 的版本号，每次更新 Configuration 时加 1
-- `Configuration Manager`：管理 Configuration 的全局组件，保证 Configuration 的全局一致性。Replica 会向 Configuration Manager 发起 Configuration 变更的请求，Configuration Manager 检查请求中携带的 version，如果不正确则拒绝修改
+- `Replica Group`：数据分片的副本集合，包含一个 primary 副本和多个 secondary 副本
+- `Configuration`：副本集合的元数据，描述了当前副本组的信息，如副本集合、primary 副本等
+- `Configuration Version`：配置的版本号，每次更新时加 1
+- `Configuration Manager`：管理数据存储集群配置信息的全局组件，需要采用 Paxos 协议保证配置在全局的一致性。副本会向配置管理器发送配置变更请求，如果请求中携带的版本号不正确则拒绝修改
+
+### 不变式
+
+PacificA是一个读写都满足强一致的算法，它通过三个不变式保证了读写的primary的唯一性，读写的强一致性，故障恢复的可靠性。
+
+- `Primary Invariant`：
+
+ update操作时，要求所有的secondary均prepare当前update，primary commit当前update，保证了Committed Invariant, 使得读操作可以获取到最新数据，primary故障时，secondary也有全量的数据。
+
+故障恢复机制保证了当secondary被选为primary时，其commit包含之前primary或secondary的commit，保证了Reconfiguration Invariant，使得在故障恢复后数据不会有丢失。
+
+#### Primary Invariant
+
+它把数据的一致性和配置的一致性分开，使用额外的一致性组件（Configuration Manager）维护配置的一致性，结合lease机制保证了Primary Invariant，使得在同一时刻有且仅有一个primary。
+
+在pacificA算法中，要保证primary不变式Primary Invariant，即
+
+- 同一个时刻只有一个副本认为自己是primary
+- configuration Manager也认为其是primary
+
+#### Reconfiguration Invariant
+
+重新配置不变式：当一个新的primary在T时刻完成reconfiguration,那么T时刻之前任意节点（包括原primary）的committedList都是新的primary当前committedList的前缀。
+
+该不变式保证了reconfiguration过程中没有数据丢失，由于update机制保证了任意的sencondary都有所有的数据，而reconfiguration重新选primary要求新的primary commit其所有的prepareList,因此这个不变式可以得到保证。
+
+**Committed Invariant**：
+
+- Secondary Committed List 为 Primary Committed List 的前缀，即 primary committed 领先于 secondary committed
+- Primary Committed List 为 Secondary PreparedList 的前缀，即 Secondary PreparedList 拥有 primary committed 的所有数据
 
 ### 读写流程
 
-PacificA 算法中对 `Replica Group` 的操作只有读 (query) 和更新 (update) 两种。
+pacificA副本数据使用主从式框架来保证数据一致性。分片的多个副本中存在一个主副本Primary和多个从副本Secondary。所有的数据更新和读取都进入主副本，当主副本出现故障无法访问时系统会从其他从副本中选择合适的节点作为新的主。
 
 #### 查询
 
@@ -36,11 +65,6 @@ query 流程中查询只能在 primary 上进行，primary 根据最新 commit �
 - 当所有的 secondary 都将 updateRequest 加入到 prepared List 后，primary 执行 update，也就是将 updateRequest 从 prepared List 移动到 committed List 中，同时将 commit point 移动到该 commit
 - primary 返回客户端 update 操作成功
 - 当下一次 primary 向 secondary 发送请求时，会带上 primary 当前的 commit point，此时 secondary 才会提升自己的 commit point
-
-**Committed Invariant**：
-
-- Secondary Committed List 为 Primary Committed List 的前缀，即 primary committed 领先于 secondary committed
-- Primary Committed List 为 Secondary PreparedList 的前缀，即 Secondary PreparedList 拥有 primary committed 的所有数据
 
 ### 故障检测
 
@@ -79,15 +103,10 @@ PacificA 算法需要时间一致的保证，因此机器之间的时钟漂移�
 
 还有一种情况时，如果一个节点曾经在Replica Group中，由于临时发生故障被移除，现在需要重新加回来。此时这个节点上的Commited List中的数据肯定是已经被Commit的了，但是Prepared List中的数据未必被Commit，所以应该将未Commit的数据移除，从Committed Point开始向Primary请求数据。
 
-#### Primary Invariant
 
-在pacificA算法中，要保证primary不变式Primary Invariant，即
 
-- 同一个时刻只有一个副本认为自己是primary
-- configuration Manager也认为其是primary
 
-#### Reconfiguration Invariant
 
-重新配置不变式：当一个新的primary在T时刻完成reconfiguration,那么T时刻之前任意节点（包括原primary）的committedList都是新的primary当前committedList的前缀。
 
-该不变式保证了reconfiguration过程中没有数据丢失，由于update机制保证了任意的sencondary都有所有的数据，而reconfiguration重新选primary要求新的primary commit其所有的prepareList,因此这个不变式可以得到保证。
+
+https://www.zhihu.com/question/53738589

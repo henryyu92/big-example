@@ -3,7 +3,7 @@
 Raft 是一种共识算法(Concensus Algorithm)，在容错(fault-tolerance)和性能(performance)上和 Paxos 等价但是更容易理解。和 Paxos 不同的是，Raft 将共识问题分解为相对独立的子问题，并通过解决子问题从而达成共识。
 
 
-Raft 将数据一致性的问题分解为 leader election、log replication、safety、membership changes 这些子问题，并且将一致性过程中节点的状态简化为 leader、follower 和 cadidate 三种状态，使得算法更加清晰。
+Raft 将数据一致性的问题分解为 `leader election`、`log replication`、`safety`、`membership changes` 这些子问题，并且将一致性过程中节点的状态简化为 leader、follower 和 cadidate 三种状态，使得算法更加清晰。
 
 Raft 协议通过选举 leader，然后使 leader 来负责管理整个 replicated log 从而实现一致性。leader 负责接收客户端的更新请求，然后复制到 follwer 节点，并且会通知 follwer 在安全的时候将日志作用与自己的状态机。
 
@@ -25,7 +25,7 @@ leader 节点选出后会周期性的向 follower 结点发送心跳消息，fol
 
 主节点选举成功之后，所有的读写操作都是由主节点完成。主节点在完成数据变更后需要将变更的数据复制到所有 follower 节点。
 
-客户端请求包含由复制状态机执行的命令，leader 会将命令作为按顺序记录在日志中，每条命令都包含 term 编号和顺序索引。leader 向所有的 follower 发送 AppendEntries 消息，如果大多数
+客户端请求包含由复制状态机执行的命令，leader 会将命令作为按顺序记录在日志中，每条命令都包含 term 编号和顺序索引。leader 并行的向所有 follower 发送 AppendEntries 消息，如果大多数
 
 客户端提交的写命令会按顺序记录在 leader 的日志中，leader 发送 AppendEntries 信息到所有的 follower，只有大多数 follwer 节点返回成功时，leader 才会返回客户端成功。
 

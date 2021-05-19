@@ -1,1 +1,1 @@
-## MapReduce 模型
+## MapReduce
