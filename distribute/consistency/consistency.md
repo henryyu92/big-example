@@ -7,3 +7,9 @@
 
 
 http://www.bailis.org/blog/linearizability-versus-serializability/#:~:text=Serializability%20is%20a%20guarantee%20about,total%20ordering)%20of%20the%20transactions.
+
+
+
+
+
+https://segmentfault.com/a/1190000022248118
