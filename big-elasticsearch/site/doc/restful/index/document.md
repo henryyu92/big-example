@@ -90,10 +90,47 @@ GET /_mget
 
 #### Bulk
 
-批量操作 API 
+在单个请求中处理多个`index`、`create`、`delete`和 `update` 动作，动作在请求体中以独占一行的 JSON 的格式表示：
+
+```sh
+action_and_meta_data\n
+optional_source\n
+```
+
+`index` 和 `create` 动作需要在下一行中指定源数据，而 `update` 动作需要在下一行中指定 `doc`、`script` 等更新文档时指定的字段。
+
+```shell
+POST _bulk
+{"index": {"_index": "test", "_id": "1"}}
+{"field1": "value1"}
+{"delete": {"_index": "test", "_id": "2"}}
+{"create": {"_index": "test", "_id": "3"}}
+{"field1": "value3"}
+{"update": {"_index": "test", "_id": "1"}}
+{"doc": {"field2": "value2"}}
+```
+
+
 
 #### Delete by query
 
-#### Update by query
+删除匹配指定查询的文档
 
-#### Reindex
+```
+POST /<target>/_delete_by_query
+```
+
+请求提交后 `Elasticsearch` 在开始处理请求并且删除匹配的文档前会生成索引数据的快照，在生成快照后到删除文档前的时间段内，使文档产生变化的请求(delete, update)会由于版本冲突导致删除失败。
+
+```
+POST /my-index-001/_delete_by_query
+{
+	"query":{
+		"match": {
+			"user.id": "elkbee"
+		}
+	}
+}
+```
+
+`Elasticsearch` 会按照顺序执行多个搜索请求来查找到匹配的文档，然后对每批文档执行批量删除。如果请求或者批量删除失败，则请求会重试最多 10 次，如果重试之后仍不能成功则停止处理，并在响应中返回失败的请求。任何成功完成删除的请求仍然保持不变而不会被回滚。

@@ -120,14 +120,6 @@ curl -H 'Content-Type:application/json' -X POST 'ip:port/_aliases' -d '{
 }'
 ```
 
-// todo
-
-索引别名可以用于设置过滤器或者路由
-
-#### Mapping
-
-#### Setting
-
 #### 索引监控
 
 ### 文档
@@ -191,17 +183,6 @@ curl -X HEAD 'ip:port/index/_doc/doc_id'?pretty=true
 curl -H 'Content-Type:application/json' -X POST 'ip:port/index_name/_update/doc_id' 
 -d '{
 	"doc"{
-		"field": "value"
-	}
+		"field": "valu}
 }'
-```
-
-修改文档还支持脚本修改，使用脚本修改可能
-
-#### 删除文档
-
-删除文档使用 `DELETE` 方法，删除文档时需要指定文档的 ID
-
-```sh
-curl -X DELETE 'ip:port/index_name/_doc/doc_id'
 ```
