@@ -1,5 +1,9 @@
 ## ReplicaManager
 
+`ReplicaManager` 负责管理当前 broker 的所有分区和副本信息，负责副本状态的切换以及消息的添加和读取。
+
+### 副本管理
+
 Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本，其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
 
 为了平衡数据写入的效率和数据的可靠性，Kafka 引入副本集合的概念，每个分区的副本都会划分到三个集合中：
@@ -7,7 +11,6 @@ Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个�
 - **ISR(In-Sync Replica)**： 和 Leader 副本保持同步的副本集合，包括 Leader 副本
 - **OSR(Out-of-Sync Replica)**： 没有和 Leader 副本保持同步的副本集合
 
-### ISR 管理
 ISR 是 Kafka 中非常重要的概念，数据只有写入 ISR 集合中的所有副本后才能被读取，当 Leader 副本异常时只有 ISR 集合中的副本才能参与 Leader 选举。
 
 Kafka 定义了 `LEO(LogEndOffset)` 表示副本中最后的 offset，ISR 中最小的 LEO 则表示整个分区的 `HW(High Watermark)`，Kafka 定义只有 HW 之前的数据可以被读取，因此 Kafka 需要保证 ISR 集合中的副本尽量和 Leader 副本保持一致从而保证集群的吞吐量。

@@ -15,19 +15,7 @@ Kafka 通过日志持久化消息，主题的每个分区都对应着配置参�
 
 日志由多个分段 (`Segment`) 组成，每个分段对应一个日志文件，其中只有最后一个分段是允许消息的追加，当写入的消息超过阈值后会滚动创建新的分段。
 
-每个日志分段都有基准偏移量 (`SegmentBaseOffset`) 
-
-集群接收的消息由 Log 追加到 Segment 中，，当 segment 的大小到达阈值大小之后，会滚动新建一个日志分段（segment）保存新的消息，而分区的消息总是追加到最新的日志分段（也就是 activeSegment）中。每个日志分段都会有一个基准偏移量（segmentBaseOffset，或者叫做 baseOffset），这个基准偏移量就是分区级别的绝对偏移量，而且这个值在日志分段是固定的。有了这个基准偏移量，就可以计算出来每条消息在分区中的绝对偏移量，最后把数据以及对应的绝对偏移量写到日志文件中。
-
-
-
-消息在追加到活跃分段时会计算当前日志是否需要切分新的分段，
-
-切分的 `LogSegment` 以日志文件的形式持久到磁盘，日志文件名为当前 `LogSegment` 中第一条消息的 `offset`。
-
-
-
-
+日志分段使用分段中第一个消息的 offset 表示基准偏移量 (`baseOffset`)，消息在追加到分段中时会根据 分段的基准偏移量计算相对偏移量。
 
 日志分段文件在一定条件会切分，相对应的索引文件也需要切分。日志分段文件切分包含以下一条即可触发切分：
 - 当前日志分段文件的大小超过了 broker 端参数 ```log.segment.bytes``` 配置的值，默认是 1073741824(1GB)
@@ -68,7 +56,7 @@ def deleteOldSegments(): Int = {
 }
 ```
 
-```deleteRetentionMsBreachedSegments``` 方法用于删除日志文件中 timestamp 最大的消息的保留时间超过了设定阈值(retentionMs)的日志。阈值 ```retentionMs``` 由参数 ```retention.ms``` 参数设定，默认为 ```7*24*60*60*1000L```。
+```deleteRetentionMsBreachedSegments``` 方法用于删除日志分段中 timestamp 最大的消息的保留时间超过了设定阈值(retentionMs)的分段。阈值 ```retentionMs``` 由参数 ```retention.ms``` 参数设定，默认为 ```7*24*60*60*1000L```。
 
 ```java
 private def deleteRetentionMsBreachedSegments(): Int = {
