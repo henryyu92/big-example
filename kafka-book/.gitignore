@@ -1,3 +1,7 @@
 book
 .idea
 .gradle
+
+**/.classpath
+**/.project
+**/.settings
