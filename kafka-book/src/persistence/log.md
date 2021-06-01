@@ -1,8 +1,6 @@
 ## 日志
 
-Kafka 通过日志持久化消息，主题的每个分区都对应着配置参数 `log.dir` 指定目录下的  `<topic>-<partition>` 目录，分区目录下包含多个消息日志文件。
-
-消息在追加到日志前会分配 64bit 的 `offset` 标识其在对应主题分区的位置，日志文件以其中包含的第一个消息的 `offset` 命名。
+Kafka 通过日志持久化消息，主题的每个分区都有对应的日志。日志在磁盘中以目录的形式存在，目录的地址由参数 `log.dir` 指定，目录的名称为 `<topic>-<partition>`，每个目录有多个存储消息数据的日志文件。
 
 ```
 集群主题比较多，分区比较多是会导致文件很多，消息写入的时候写入多个文件夹，不再是顺序写了
@@ -10,55 +8,63 @@ Kafka 通过日志持久化消息，主题的每个分区都对应着配置参�
 
 ![Log](../img/log.png)
 
+日志由多个 `LogSegment` 组成，其中只有最后一个 `LogSegment` 允许追加消息数据，每个 `LogSegment` 在分区目录中对应一个日志文件，每个 `LogSegment` 将追加到其中的第一个消息的 `offset` 作为日志文件的名称。
 
-### 消息追加
+追加到 `LogSegment` 的日志达到阈值后会变成只读状态，并且创建新的 `LogSegment` 用于消息的追加，日志在满足任意条件都会触发切分：
+- 当前日志分段大小超过参数 `log.segment.bytes` 设置的值，默认为 1073741824(1GB)
+- 当前日志分段中消息的最大时间戳与当前系统的时间戳差值大于 `log.roll.ms` 或者 `log.roll.hours` 的值，优先使用 `log.roll.ms` 设置的值，默认只设置了 `log.roll.hours` 为 168，即 7 天
+- 偏移量索引文件或时间戳索引文件的大小达到参数 `log.index.size.max.bytes` 配置的值，默认是 10485760(10MB)
+- 追加的消息的偏移量与当前日志分段的偏移量之间的差值大于 Integer.MAX_VALUE，即 `offset - baseOffset > Integer.MAX_VALUE`
 
-日志由多个分段 (`Segment`) 组成，每个分段对应一个日志文件，其中只有最后一个分段是允许消息的追加，当写入的消息超过阈值后会滚动创建新的分段。
-
-日志分段使用分段中第一个消息的 offset 表示基准偏移量 (`baseOffset`)，消息在追加到分段中时会根据 分段的基准偏移量计算相对偏移量。
-
-日志分段文件在一定条件会切分，相对应的索引文件也需要切分。日志分段文件切分包含以下一条即可触发切分：
-- 当前日志分段文件的大小超过了 broker 端参数 ```log.segment.bytes``` 配置的值，默认是 1073741824(1GB)
-- 当前日志分段中消息的最大时间戳与当前系统的时间戳的差值大于 ```log.roll.ms``` 或 ```log.roll.hours``` 参数配置的值(log.roll.ms 优先级大于 log.roll.hours)，默认情况下只配了 ```log.roll.hours``` 值为 168(7 天)
-- 偏移量索引文件或时间戳索引文件的大小达到 broker 端参数 ```log.index.size.max.bytes``` 配置的值，默认是 10485760(10MB)
-- 追加的消息的偏移量与当前日志分段的偏移量之间的差值大于 Integer.MAX_VALUE，即 ```offset - baseOffset > Integer.MAX_VALUE```
-
+```scala
+val segment = maybeRoll(messagesSize = validRecords.sizeInBytes,
+  maxTimestampInMessages = appendInfo.maxTimestamp,
+  maxOffsetInMessages = appendInfo.lastOffset)
 
 
-Kafka 依赖文件系统来存储消息，采用文件追加的方式来写入消息，即只能在日志文件的尾部追加新的消息，并且不允许修改已写入的消息。
-
-Kafka 消息写入时会先写入页缓存，然后由操作系统负责具体的刷盘任务，通过设置参数 `log.flush.interval.message` 和 `log.flush.interval.ms` 可以强制控制数据刷盘的速率。
-
-### 日志清理
-
-Kafka 将消息存储在磁盘中，为了控制磁盘占用空间的不断增加需要对消息进行一定的清理操作。Kafka 提供两种日志清理策略：
-
-- ```Log Retention```：按照一定的保留策略直接删除不符合条件的日志分段
-- ```Log Compaction```：针对每个消息的 key 进行整合，对于有相同 key 的不同 value 值只保留最后一个版本
-
-通过 broker 端参数 ```log.cleanup.policy``` 设置日志清理策略，默认值为 delete，即采用日志删除的清理策略；如果要采用日志压缩的策略则需要设置为 compact，同时需要将 ```log.cleaner.enable``` 设置为 true；通过将 ```log.cleanpu.policy``` 设置为 ```delete,compact``` 可以同时支持日志删除和日志压缩两种策略。
-
-Kafka 在启动时会启动 LogManager 用于日志文件的管理，LogManager 启动时创建 ```kafka-log-retention``` 线程用于周期性的 (```log.retention.check.interval.ms```，默认 300000) 检测不符合保留条件的日志文件，并且创建了 LogCleaner 用于 Log Compaction。
-
-#### Log Retention
-
-基于 Retention 策略的日志清理会删除掉不符合保留条件的 LogSegment，清理条件包括 LogSegment 中消息的保留时间超过阈值、LogSegment 对应的日志文件大小超过阈值 和 ```baseOffset``` 小于 ```logStartOffset``` 的 LogSegment。
-
-```java
-// Log#deleteOldSegments
-
-def deleteOldSegments(): Int = {
-  if (config.delete) {
-    deleteRetentionMsBreachedSegments() + deleteRetentionSizeBreachedSegments() + deleteLogStartOffsetBreachedSegments()
+private def maybeRoll(messagesSize: Int, maxTimestampInMessages: Long, maxOffsetInMessages: Long): LogSegment = {
+  val segment = activeSegment
+  val now = time.milliseconds
+  val reachedRollMs = segment.timeWaitedForRoll(now, maxTimestampInMessages) > config.segmentMs - segment.rollJitterMs
+  if (segment.size > config.segmentSize - messagesSize ||
+      (segment.size > 0 && reachedRollMs) ||
+      segment.index.isFull || segment.timeIndex.isFull || !segment.canConvertToRelativeOffset(maxOffsetInMessages)) {
+    roll(maxOffsetInMessages - Integer.MAX_VALUE)
   } else {
-    deleteLogStartOffsetBreachedSegments()
+    segment
   }
 }
 ```
+Kafka 使用 `MMAP` 零拷贝技术来减少数据写磁盘时的性能损耗，消息在写入 `LogSegment` 之后并不会立即刷盘，而是由操作系统具体执行刷盘任务。因此在消息写入后有可能会因为 broker 所在机器异常导致数据丢失，Kafka 提供了控制数据刷盘的参数 `log.flush.interval.message` 和 `log.flush.interval.ms` 分别可以在积累一定量的消息数据后刷盘或者间隔指定时间后刷盘。
 
-```deleteRetentionMsBreachedSegments``` 方法用于删除日志分段中 timestamp 最大的消息的保留时间超过了设定阈值(retentionMs)的分段。阈值 ```retentionMs``` 由参数 ```retention.ms``` 参数设定，默认为 ```7*24*60*60*1000L```。
 
-```java
+### 日志清理
+
+Kafka 为了控制磁盘空间的占用率会对消息进行清理操作，Kafka 提供了两种日志清理策略：
+- `Log Retention`：按照保留策略直接删除不符合条件的日志分段
+- `Log Compaction`：针对每个消息的 key 进行整合，对于有相同 key 的不同 value 值只保留最后一个版本
+
+Kafka 提供参数 `log.cleanup.policy` 设置日志清理策略，默认是 `delete`，即采用日志删除的清理策略，如果需要采用 `Log Compaction` 策略则需要将参数设置为 `compact` 并将参数 `log.cleaner.enable` 设置为 true。通过设置 `log.cleanup.policy` 为 `delete,compact` 可以同时开启日志删除和日志压缩两种策略。
+
+`Broker` 启动时会创建 `LogManager` 用于日志文件的管理，`LogMananger` 在启动时创建 `kafka-log-retention` 线程以参数 `log.retention.check.interval.ms` 设置的时间(默认 300000，即 300s) 为周期检测日志文件并删除不符合保留条件的日志文件。
+
+`LogManager` 在启动时会启动 `LogCleaner` 用于执行日志压缩，`LogCleaner` 会创建 `kafka-log-cleaner-thread` 线程用于日志压缩。
+
+
+#### 日志删除
+日志删除策略会删除不符合保留条件的日志分段，日志分段满足任意条件则认为需要删除：
+- 日志分段中的最大时间戳和当前时间的差值大于参数 `log.retention.ms` 设置的值，也就是说该日志分段中的所有消息都超过了设置的生存时间，默认生存时间设置为 7 天
+- 分区日志的总大小超过 `log.retention.bytes` 则需要从最开始的日志分段开始删除，直到分区日志总大小不超过指定的值，也就是分区日志的大小需要不大于需要保留的数据量，默认是 -1 表示保留所有的数据
+- 下一个日志分段的起始消息 `offset` 小于等于日志的起始消息 `offset` 则说明当前日志分段已经对消费者不可见，需要被删除 
+
+基于 Retention 策略的日志清理会删除掉不符合保留条件的 LogSegment，清理条件包括 LogSegment 中消息的保留时间超过阈值、LogSegment 对应的日志文件大小超过阈值 和 ```baseOffset``` 小于 ```logStartOffset``` 的 LogSegment。
+
+```scala
+def deleteOldSegments(): Int = {
+  if (!config.delete) return 0
+  deleteRetentionMsBreachedSegments() + deleteRetentionSizeBreachedSegments() + deleteLogStartOffsetBreachedSegments()
+}
+
 private def deleteRetentionMsBreachedSegments(): Int = {
   if (config.retentionMs < 0) return 0
   val startMs = time.milliseconds
@@ -67,34 +73,23 @@ private def deleteRetentionMsBreachedSegments(): Int = {
   deleteOldSegments((segment, _) => startMs - segment.largestTimestamp > config.retentionMs,
     reason = s"retention time ${config.retentionMs}ms breach")
 }
-```
 
-如果通过计算发现所有的 LogSegment 都已经过期，则需要先切分出一个新的 LogSegment 用于接收消息写入，然后再对 LogSegment 执行删除操作。
-
-```deleteRetentionSizeBreachedSegments``` 方法用于清理超过一定大小的日志。该算法首先计算 Log 的总大小和阈值的差值 diff，阈值通过参数 ```retention.bytes``` 设置，默认值为 -1 表示无穷大。如果差值 diff 大于 0，则从第一个 LogSegment 开始找出需要清理的 LogSegment。
-
-```java
 private def deleteRetentionSizeBreachedSegments(): Int = {
   if (config.retentionSize < 0 || size < config.retentionSize) return 0
-    // 计算 Log 总大小和 retensionSize 的差值
-    var diff = size - config.retentionSize
-    def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) = {
-      // 如果 LogSegment 大小小于差值则需要清理
-      if (diff - segment.size >= 0) {
-        diff -= segment.size
-        true
-      } else {
-        false
-      }
+  // 计算 Log 总大小和 retensionSize 的差值
+  var diff = size - config.retentionSize
+  def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) = {
+    // 如果 LogSegment 大小小于差值则需要清理
+    if (diff - segment.size >= 0) {
+      diff -= segment.size
+      true
+    } else {
+      false
     }
-
-    deleteOldSegments(shouldDelete, reason = s"retention size in bytes ${config.retentionSize} breach")
+  }
+  deleteOldSegments(shouldDelete, reason = s"retention size in bytes ${config.retentionSize} breach")
 }
-```
 
-```deleteLogStartOffsetBreachedSegments``` 方法用于删除所有消息的 offset 小于 Log 的 logStartOffset 的 LogSegment。算法计算 LogSegment 的下一个 LogSegment 的 baseOffset 是否小于 Log 的 logStartOffset，如果是则表示是该 LogSegment 可以删除：
-
-```java
 private def deleteLogStartOffsetBreachedSegments(): Int = {
   def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) =
     nextSegmentOpt.exists(_.baseOffset <= logStartOffset)
@@ -102,6 +97,18 @@ private def deleteLogStartOffsetBreachedSegments(): Int = {
   deleteOldSegments(shouldDelete, reason = s"log start offset $logStartOffset breach")
 }
 ```
+通过日志删除策略筛选出需要删除的 `Segment` 还需要满足
+```scala
+private def deleteOldSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean, reason: String): Int = {
+  lock synchronized {
+    val deletable = deletableSegments(predicate)
+    if (deletable.nonEmpty)
+      info(s"Found deletable segments with base offsets [${deletable.map(_.baseOffset).mkString(",")}] due to $reason")
+    deleteSegments(deletable)
+  }
+}
+```
+
 
 日志删除策略确定的 LogSegment 除了需要满足策略外，还需要满足删除的 LogSegment 中的消息的 offset 是小于 Log 的 HW 的，并且删除的 LogSegment 不能是 Log 的最后一个 LogSegment：
 
@@ -202,11 +209,7 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 日志的 compaction 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时指定是否开启，默认情况下所有的主题都是开启的。
 
 
-
 ![Log Compaction](../img/log-compaction.png)
-
-
-
 
 
 开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。

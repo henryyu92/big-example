@@ -1,18 +1,20 @@
 package client.admin;
 
+import java.util.Collections;
+import java.util.Properties;
+
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.KafkaAdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 
-import java.util.Collections;
-import java.util.Map;
-
-public class KafkaManagement {
+public class KafkaManager {
 
     private final AdminClient admin;
 
-    public KafkaManagement(String broker){
-        admin = KafkaAdminClient.create((Map<String, Object>) null);
+    public KafkaManager(String brokers){
+        Properties properties = new Properties();
+        properties.setProperty("bootstrap.servers", brokers);
+        admin = KafkaAdminClient.create(properties);
     }
 
     public void createTopic(String topic, int partitions, short replicas){
