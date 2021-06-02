@@ -97,7 +97,7 @@ private def deleteLogStartOffsetBreachedSegments(): Int = {
   deleteOldSegments(shouldDelete, reason = s"log start offset $logStartOffset breach")
 }
 ```
-通过日志删除策略筛选出需要删除的 `Segment` 还需要满足
+日志删除策略确定的 LogSegment 除了需要满足策略外，还需要满足删除的 LogSegment 中的消息的 offset 是小于 Log 的 HW 的，并且删除的 LogSegment 不能是 Log 的最后一个 LogSegment。
 ```scala
 private def deleteOldSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean, reason: String): Int = {
   lock synchronized {
@@ -107,12 +107,7 @@ private def deleteOldSegments(predicate: (LogSegment, Option[LogSegment]) => Boo
     deleteSegments(deletable)
   }
 }
-```
 
-
-日志删除策略确定的 LogSegment 除了需要满足策略外，还需要满足删除的 LogSegment 中的消息的 offset 是小于 Log 的 HW 的，并且删除的 LogSegment 不能是 Log 的最后一个 LogSegment：
-
-```java
 private def deletableSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean): Iterable[LogSegment] = {
   if (segments.isEmpty) {
     Seq.empty
@@ -138,7 +133,6 @@ private def deletableSegments(predicate: (LogSegment, Option[LogSegment]) => Boo
   }
 }
 ```
-
 确定了需要删除的 LogSegment 之后就可以删除过期的 LogSegment，删除之前需要保证 Log 中最少有一个 LogSegment，因此当需要删除的 LogSegment 数量等于 Log 中 LogSegment 数量时会再创建出一个 LogSegment。
 
 ```java
@@ -161,8 +155,7 @@ private def deleteSegments(deletable: Iterable[LogSegment]): Int = {
   }
 }
 ```
-
-LogSegment 的删除包含两部分：删除过期的 LogSegment 和 增加 Log 的 logStartOffset。删除过期的 LogSegmenet 操作首先从 Log 对象中维护的 LogSegment 的跳跃表中移除待删除的 LogSegment，保证没有线程对这些分段进行读取操作，然后将 LogSegment 对应的所有文件(日志文件和索引文件)添加 ```.delete``` 后缀，最后通过一个名为 ```delete-file``` 的延迟任务删除这些文件，任务的延迟时间由参数 ```file.delete.delay.ms``` 设置，默认是 60000。
+删除过期的 LogSegmenet 操作首先从 Log 对象中维护的 LogSegment 的跳跃表中移除待删除的 LogSegment，保证没有线程对这些分段进行读取操作，然后将 LogSegment 对应的所有文件(日志文件和索引文件)添加 ```.delete``` 后缀，最后通过一个名为 ```delete-file``` 的延迟任务删除这些文件，任务的延迟时间由参数 ```file.delete.delay.ms``` 设置，默认是 60000。
 
 ```java
 // Log#removeAndDeleteSegments
@@ -206,26 +199,15 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 
 #### Log Compaction
 
-日志的 compaction 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时指定是否开启，默认情况下所有的主题都是开启的。
+日志的 compaction 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时通过参数 `log.cleaner.enable` 设置是否开启，默认情况下所有的主题都是开启的。
 
 
 ![Log Compaction](../img/log-compaction.png)
 
+日志压缩是由 `LogMananger` 创建的 `LogCleaner` 完成，`LogCleaner` 创建参数 `log.cleaner.threads` 指定的线程(默认 1)来处理日志压缩，日志压缩线程会遍历日志数据并将需要删除的数据的消息的 value 设置为 null，最后由日志清理线程删除 value 为 null 的消息数据。
 
-开启 Log Compaction 是由参数 ```log.cleaner.enable``` 设置的，默认为 true。
+日志压缩的实现在 `CleanThread` 的 `doWork` 方法中，日志压缩先筛选出需要进行压缩的日志分段，kafka 日志存储目录中的 `cleaner-offset-checkoupoint` 文件记录了当前分区已经清理过的 `offset`，因此可以将整个分区日志划分为两部分。
 
-`LogMananger` 在启动时会启动 LogCleaner，并在启动时创建 numThreads (参数 ```log.cleaner.threads```
-设置，默认 1) 个 CleanerThread 线程用于执行 LogComapction。
-
-在 ```CleanThread``` 的 ```doWork``` 方法中先通过 CleanManager 获取可以 Compact 的 Log，然后执行 Compact 操作，如果 Compact 失败则采取回退算法休眠：
-
-```java
-override def doWork(): Unit = {
-  val cleaned = tryCleanFilthiestLog()
-  if (!cleaned)
-    pause(config.backOffMs, TimeUnit.MILLISECONDS)
-}
-```
 
 Kafka 日志存储目录内有 ```cleaner-offset-checkpoint``` 文件记录当前分区中已经清理的 offset，通过这个文件可以将 Log 分为已经清理过的部分和未清理的部分。然后在 ```LogCleanerManager#cleanableOffsets``` 方法中在未清理的部分中定位可以清理的范围 ```[firstDirtyOffset, firstUnstableOffset)```。
 

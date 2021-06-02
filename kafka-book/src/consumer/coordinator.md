@@ -15,18 +15,7 @@
 
 ### 再均衡
 
-再均衡是指分区的所属权从一个消费者转移到另一个消费者的行为，它为消费组具备高可用性和伸缩性提供保障，使得可以方便安全的删除或添加消费组中的消费者。
 
-再均衡发生期间消费组内的消费者是无法消费消息的，也就是在再均衡发生期间消费组不可用；再均衡之后会丢失消费者对分区持有的状态(如消费位移)。
-
-每个消费组的子集在服务端对应一个 GroupCoordinator 对其进行管理，消费者客户端中的 ConsumerCoordinator 负责与 broker 端的 GroupCoordinator 进行交互。
-
-触发再均衡的情况：
-- 新的消费者加入消费组
-- 消费者下线，消费者遇到长时间 GC、网络延时导致消费者长时间未向 GroupCoordinator 发送心跳等情况时会被认为下线
-- 消费者退出消费组(发送 LeaveGroupRequest 请求)，比如消费者客户端调用 unsubscribe 发那个发取消订阅
-- 消费组对应的 GroupCoordinator 节点发生变更
-- 消费组内所有订阅的任一主题或者主题的分区数量发生变化
 
 Kafka 服务端提供 GroupCoordinator 组件用于管理消费组，而消费者客户端的 ConsumerCoordinator 组件负责与 GroupCoordinator 进行交互。
 
