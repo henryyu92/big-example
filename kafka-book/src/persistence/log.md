@@ -10,11 +10,12 @@ Kafka 通过日志持久化消息，主题的每个分区都有对应的日志�
 
 日志由多个 `LogSegment` 组成，其中只有最后一个 `LogSegment` 允许追加消息数据，每个 `LogSegment` 在分区目录中对应一个日志文件，每个 `LogSegment` 将追加到其中的第一个消息的 `offset` 作为日志文件的名称。
 
-追加到 `LogSegment` 的日志达到阈值后会变成只读状态，并且创建新的 `LogSegment` 用于消息的追加，日志在满足任意条件都会触发切分：
+`LogSegment` 达到阈值后就变成只读状态，并且创建新的 `LogSegment` 用于消息的追加，满足下列任意条件都会触发 `LogSegment` 的滚动：
+
 - 当前日志分段大小超过参数 `log.segment.bytes` 设置的值，默认为 1073741824(1GB)
-- 当前日志分段中消息的最大时间戳与当前系统的时间戳差值大于 `log.roll.ms` 或者 `log.roll.hours` 的值，优先使用 `log.roll.ms` 设置的值，默认只设置了 `log.roll.hours` 为 168，即 7 天
-- 偏移量索引文件或时间戳索引文件的大小达到参数 `log.index.size.max.bytes` 配置的值，默认是 10485760(10MB)
-- 追加的消息的偏移量与当前日志分段的偏移量之间的差值大于 Integer.MAX_VALUE，即 `offset - baseOffset > Integer.MAX_VALUE`
+- 日志分段中消息的最大时间戳与当前系统的时间戳差值大于 `log.roll.ms` 或者 `log.roll.hours` 的值，优先使用 `log.roll.ms` 设置的值，默认只设置了 `log.roll.hours` 为 168，即 7 天
+- 日志分段对应的偏移量索引文件或时间戳索引文件的大小达到参数 `log.index.size.max.bytes` 配置的值，默认是 10485760(10MB)
+- 追加的消息的偏移量与当前日志分段的偏移量(日志分段中第一个消息的偏移量)之间的差值大于 Integer.MAX_VALUE，即 `offset - baseOffset > Integer.MAX_VALUE`
 
 ```scala
 val segment = maybeRoll(messagesSize = validRecords.sizeInBytes,
@@ -55,9 +56,7 @@ Kafka 提供参数 `log.cleanup.policy` 设置日志清理策略，默认是 `de
 日志删除策略会删除不符合保留条件的日志分段，日志分段满足任意条件则认为需要删除：
 - 日志分段中的最大时间戳和当前时间的差值大于参数 `log.retention.ms` 设置的值，也就是说该日志分段中的所有消息都超过了设置的生存时间，默认生存时间设置为 7 天
 - 分区日志的总大小超过 `log.retention.bytes` 则需要从最开始的日志分段开始删除，直到分区日志总大小不超过指定的值，也就是分区日志的大小需要不大于需要保留的数据量，默认是 -1 表示保留所有的数据
-- 下一个日志分段的起始消息 `offset` 小于等于日志的起始消息 `offset` 则说明当前日志分段已经对消费者不可见，需要被删除 
-
-基于 Retention 策略的日志清理会删除掉不符合保留条件的 LogSegment，清理条件包括 LogSegment 中消息的保留时间超过阈值、LogSegment 对应的日志文件大小超过阈值 和 ```baseOffset``` 小于 ```logStartOffset``` 的 LogSegment。
+- 下一个日志分段的偏移量 (`baseOffset`) 小于等于日志的偏移量 (`logStartOffset`，日志保留的第一个消息的偏移量)  则说明当前日志分段已经对消费者不可见，需要被删除 
 
 ```scala
 def deleteOldSegments(): Int = {
@@ -65,6 +64,7 @@ def deleteOldSegments(): Int = {
   deleteRetentionMsBreachedSegments() + deleteRetentionSizeBreachedSegments() + deleteLogStartOffsetBreachedSegments()
 }
 
+// 删除超过保留时间的日志分段
 private def deleteRetentionMsBreachedSegments(): Int = {
   if (config.retentionMs < 0) return 0
   val startMs = time.milliseconds
@@ -74,6 +74,7 @@ private def deleteRetentionMsBreachedSegments(): Int = {
     reason = s"retention time ${config.retentionMs}ms breach")
 }
 
+// 删除超过日志保留大小的日志分段
 private def deleteRetentionSizeBreachedSegments(): Int = {
   if (config.retentionSize < 0 || size < config.retentionSize) return 0
   // 计算 Log 总大小和 retensionSize 的差值
@@ -90,6 +91,7 @@ private def deleteRetentionSizeBreachedSegments(): Int = {
   deleteOldSegments(shouldDelete, reason = s"retention size in bytes ${config.retentionSize} breach")
 }
 
+// 删除不可见的日志分段
 private def deleteLogStartOffsetBreachedSegments(): Int = {
   def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]) =
     nextSegmentOpt.exists(_.baseOffset <= logStartOffset)
@@ -97,7 +99,10 @@ private def deleteLogStartOffsetBreachedSegments(): Int = {
   deleteOldSegments(shouldDelete, reason = s"log start offset $logStartOffset breach")
 }
 ```
+满足日志删除策略的日志分段并不会全部删除，
+
 日志删除策略确定的 LogSegment 除了需要满足策略外，还需要满足删除的 LogSegment 中的消息的 offset 是小于 Log 的 HW 的，并且删除的 LogSegment 不能是 Log 的最后一个 LogSegment。
+
 ```scala
 private def deleteOldSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean, reason: String): Int = {
   lock synchronized {
@@ -197,16 +202,16 @@ private def deleteSegmentFiles(segments: Iterable[LogSegment], asyncDelete: Bool
 }
 ```
 
-#### Log Compaction
+#### 日志压缩
 
-日志的 compaction 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时通过参数 `log.cleaner.enable` 设置是否开启，默认情况下所有的主题都是开启的。
+日志压缩 (`Log Compaction`) 操作保证 Kafka 在单个主题分区的数据日志中只保留相同 key 的消息最后的值。日志的 compaction 机制是基于记录的，可以在创建主题时通过参数 `log.cleaner.enable` 设置是否开启，默认情况下所有的主题都是开启的。
 
 
 ![Log Compaction](../img/log-compaction.png)
 
-日志压缩是由 `LogMananger` 创建的 `LogCleaner` 完成，`LogCleaner` 创建参数 `log.cleaner.threads` 指定的线程(默认 1)来处理日志压缩，日志压缩线程会遍历日志数据并将需要删除的数据的消息的 value 设置为 null，最后由日志清理线程删除 value 为 null 的消息数据。
+日志压缩是由 `LogMananger` 创建的 `LogCleaner` 完成，`LogCleaner` 创建参数 `log.cleaner.threads` 指定的线程(默认 1)来处理日志压缩。
 
-日志压缩的实现在 `CleanThread` 的 `doWork` 方法中，日志压缩先筛选出需要进行压缩的日志分段，kafka 日志存储目录中的 `cleaner-offset-checkoupoint` 文件记录了当前分区已经清理过的 `offset`，因此可以将整个分区日志划分为两部分。
+日志压缩先筛选出需要进行压缩的日志分段，kafka 日志存储目录中的 `cleaner-offset-checkoupoint` 文件记录了当前分区已经清理过的 `offset`，因此可以将整个分区日志划分为两部分。
 
 
 Kafka 日志存储目录内有 ```cleaner-offset-checkpoint``` 文件记录当前分区中已经清理的 offset，通过这个文件可以将 Log 分为已经清理过的部分和未清理的部分。然后在 ```LogCleanerManager#cleanableOffsets``` 方法中在未清理的部分中定位可以清理的范围 ```[firstDirtyOffset, firstUnstableOffset)```。
