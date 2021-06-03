@@ -1,14 +1,16 @@
 ## 索引
 
-索引 API 用于管理索引的创建、修改、删除等。
+索引是具有相同结构的文档集合，`Elasticsearch` 提供了 RESTful API 用于索引的管理。
 
 ### 创建索引
 
-创建索引 API 用于向 `Elasticsearch` 集群添加新的索引，创建索引时可以指定可选的设置：
+创建索引 API 用于向 `Elasticsearch` 集群添加新的索引，创建索引时可以指定 `mapping`、`setting` 和 `aliase` 属性。
 
-- `settings`：索引的配置
-- `mappings`：索引的 Mapping 定义
-- `aliases`：索引中的别名
+```sh
+curl -X PUT /<index-name>
+```
+
+
 
 ```shell
 # 创建索引

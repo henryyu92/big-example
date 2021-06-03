@@ -1,83 +1,57 @@
 ## Mapping
 
-`Mapping` 是定义文档及其包含的字段如何存储和索引的过程。
-
-文档是字段的集合，每个字段都有自己的数据类型，`Mapping` 根据定义的文档字段映射关系将数据和文档关联，映射关系定义中还包括元数据字段用于定义文档关联的元数据如何处理。
+`Mapping` 是定义文档及其包含的字段如何存储和索引的过程。文档是字段的集合，每个字段都有自己的数据类型，`Mapping` 根据定义的文档字段映射关系将数据和文档关联，映射关系定义中还包括元数据字段用于定义文档关联的元数据如何处理。
 
 `Elasticsearch` 提供了动态映射和显式映射来定义文档字段映射关系，动态映射会自动推断数据的类型，而显式映射则需要在创建索引时显式的指定字段的类型等元数据。
 
-
-
-### 动态映射
-
-`ElasticSearch` 可以在创建文档的时候自动添加字段，并自动的为字段推断类型。
-
-```shell
-PUT data/_doc/1
-{
-	"count": 5
-}
-```
-
-
-
-### 显式映射
-
-显式映射可以精确的控制映射关系，显式映射可以在创建索引的时候设置：
-
-```shell
-PUT /my-index-001
-{
-	"mapping":{
-		"properties":{
-			"age": {"type": "integer"},
-			"email": {"type": "keyword"},
-			"name": {"type": "text"}
-		}
-	}
-}
-```
-
-对于已经存在的索引，可以为其添加新的字段映射关系：
-
-```shell
-PUT /my-index-001/_mapping
-{
-	"properties":{
-		"employee-id":{
-			"type": "keyword",
-			"index": false
-		}
-	}
-}
-```
-
-除了一些支持更改的映射关系，`Elasticsearch` 不允许修改已经存在的字段的数据类型。
+- **动态映射**：在创建文档的时候自动为字段推断数据类型
+- **显式映射**：需要在创建索引的时候设置字段的类型，设置之后不允许修改，后续创建该索引的文档时字段的类型即为设置的类型
 
 ### 查看 Mapping
 
-`Elasticsearch` 提供了查询 Mapping 的 `API` ：
+使用 `_mapping` 方法可以查看 `Mapping` 的定义，如果 `Mapping` 中定义的数据较多，可以在查询中指定字段。
 
-```shell
-GET /my-index-001/_mapping
+```sh
+# 查询所有的 mapping 定义
+GET /_mapping
+
+# 查询指定索引的 mapping 定义
+GET /<target>/_mapping
+
+# 查询索引的 mapping 的指定字段
+GET /<target>/_mapping/field/<field-name>
 ```
 
-查看全部的 Mapping 数据会比较多，还可以查询指定字段的 Mapping 信息：
+查看 `Mapping` API 支持使用 `,` 分割的方式查看多个索引的多个字段的映射
 
-```shell
-GET /my-index-001/_mapping/field/employee-id
+```sh
+# 获取多个索引的 mapping 定义
+GET /my-index-001,my-index-002/_mapping
+
+# 获取索引的多个字段映射
+GET /my-index-001/_mapping/field/field1,field2
 ```
 
-可以只获取某个文档或索引的某个或多个字段而不是全部内容。可以使用逗号(,)分隔，也可以使用通配符。
+### 更新 Mapping
 
+可以像已经存在的 `mapping` 添加新的字段映射，但是已经存在的字段类型映射不允许修改。
 
+```sh
+PUT /my-index-001/_mapping
+{
+	"properties":{
+		"user":{
+			"properties":{
+				"name":{
+					"type": "keyword"
+				}
+			}
+		}
+	}
+}
+```
 
-为了减少输入的工作量，减少出错概率，可以依照以下步骤：
-
-- 创建一个临时的 index，写入一些样本数据
-- 通过访问 Mapping API 获得临时文件的动态 Mapping
-- 修改使用该配置创建需要的索引
-- 删除临时索引
+如果需要修改 `mapping` 中已经存在的字段类型，可以通过先创建新的有正确 `mapping` 的索引，然后通过 `reindex` 将当前索引的数据移动到新的索引。
 
 ### Mapping 设置
 
