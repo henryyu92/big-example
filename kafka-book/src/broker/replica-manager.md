@@ -2,11 +2,10 @@
 
 `ReplicaManager` 负责和 `KafkaController` 通信从而管理当前 broker 的所有分区和副本信息。
 
-### 副本管理
-
 Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个副本，其中 leader 副本负责对外提供读写服务，follower 副本负责同步 leader 副本上的数据，当 leader 副本不可用时需要根据选举策略从 follower 副本中选举出新的 leader 副本。
 
 为了平衡数据写入的效率和数据的可靠性，Kafka 引入副本集合的概念，每个分区的副本都会划分到三个集合中：
+
 - **AR(Assigned Replica)**： 分区中所有副本的集合
 - **ISR(In-Sync Replica)**： 和 Leader 副本保持同步的副本集合，包括 Leader 副本
 - **OSR(Out-of-Sync Replica)**： 没有和 Leader 副本保持同步的副本集合
@@ -15,40 +14,30 @@ Kafka 使用多副本保证数据的可靠性，每个分区都有至少一个�
 
 Kafka 定义了 `LEO(LogEndOffset)` 表示副本中最后的 offset，ISR 中最小的 LEO 则表示整个分区的 `HW(High Watermark)`，Kafka 定义只有 HW 之前的数据可以被读取，因此 Kafka 需要保证 ISR 集合中的副本尽量和 Leader 副本保持一致从而保证集群的吞吐量。
 
-Kafka 在启动 `ReplicaManager` 时创建了 `isr-expiration` 线程和 `isr-change-propagation` 线程监控分区 IRS 集合的收缩并广播 ISR 的变更。
+### ISR
+
+Kafka 在启动 `ReplicaManager` 时创建了 `isr-expiration` 线程监控分区 IRS 集合的变更。
 ```scala
 def startup(): Unit = {
   // 周期性的检查所有分区的 ISR 是否需要收缩
   scheduler.schedule("isr-expiration", maybeShrinkIsr _, period = config.replicaLagTimeMaxMs / 2, unit = TimeUnit.MILLISECONDS)
-  // 广播 ISR 的变更
-  scheduler.schedule("isr-change-propagation", maybePropagateIsrChanges _, period = 2500L, unit = TimeUnit.MILLISECONDS)
 }
 ```
-`isr-expiration` 线程以 `replicaLagTimeMaxMs/2` 的周期检查所有分区的
+`isr-expiration` 线程以 `replicaLagTimeMaxMs/2` 的周期(```replica.lag.time.max.ms``` 设置，默认 10000ms)遍历所有分区并将不能和 leader 副本保持同步 (`LEO` 相同) 的副本从 isr 集合中删除。
 
-周期性的遍历以 `replicaLagTimeMaxMs/2` 的周期(```replica.lag.time.max.ms``` 设置，默认 10000ms)遍历 ISR 中的所有副本，当副本的 LEO 和 leader 副本的 LEO 不相等并且副本上次和 leader 副本保持一致的时间 (lastCaughtUpTimeMs) 与当前时间相差 ```replicaLagTimeMaxMs``` 则会被移出 ISR。即 **ISR 中的副本和 leader 副本不能保持同步的最长时间为 ```1.5 * replicaLagTimeMaxMs```**。
-```java
-private def isFollowerOutOfSync(replicaId: Int,
-                                leaderEndOffset: Long,
-                                currentTimeMs: Long,
-                                maxLagMs: Long): Boolean = {
-  val followerReplica = getReplicaOrException(replicaId)
-  // 判断 follower 副本不在 ISR 集合
-  followerReplica.logEndOffset != leaderEndOffset &&
-    (currentTimeMs - followerReplica.lastCaughtUpTimeMs) > maxLagMs
-}
+副本不能和 `leader` 副本保持同步是通过计算 `follower` 副本上次和 `leader` 保持同步的时间戳 (`lastCaughtUpTimeMs`) 和当前时间的时差大于 ``replicaLagTimeMaxMs`，也就是说 isr 集合中的副本和 `leader` 副本不能保持同步的最长时间为 `1.5*replicaLagTimeMaxMs`。
+
+```scala
+val laggingReplicas = candidateReplicas.filter(r => (time.milliseconds - r.lastCaughtUpTimeMs) > maxLagMs)
 ```
 
-副本被移出 ISR 一般有三种情况：
-- follower 同步较慢，在一段时间内都无法追赶上 leader 副本。常见原因是 I/O 瓶颈导致 follower 追加复制消息速度比从 leader 拉取速度慢
-- follower 进程卡住，在一段时间内根本没有向 leader 副本发起同步请求。一般是由于 follower 进程 GC 或者 follower 失效
-- 新启动的 follower 副本，新增的 follower 副本在完全赶上 leader 副本之前不在 ISR 中
+副本不能和 `leader` 副本保持同步会在两种情况下发生：
 
-```isr-expiration``` 线程更新 ISR 后将新的 ISR 和 leader 数据记录到 ZK 上 ```/brokers/topics/<topic>/partitions/<paritition>/state``` 节点中：
-```
+- `follower` 同步较慢，在 `replicaLagTimeMaxMs` 时间内都不能和 `leader` 副本保持一致
+- `follower` 由于某些原因在 `replicaLagTimeMaxMs` 时间内没有从 `leader` 同步数据
 
-```
-记录到 ZK 上的数据包括：
+`ISR` 集合更新后，```isr-expiration``` 线程会将新的 `ISR` 集合更新到 ZooKeeper 上。数据记录在 ```/brokers/topics/<topic>/partitions/<paritition>/state``` 节点中，记录的数据包括：
+
 - ```Leader``` 表示当前分区的 leader 副本所在的 broker 
 - ```ISR``` 表示更新后的 ISR 集合
 - ```LeaderEpoch``` 表示当前分区的 leader epoch
@@ -76,8 +65,6 @@ def maybePropagateIsrChanges(): Unit = {
 ISR 集合变更的广播是在 ZK 的 ```/isr_change_notification``` 下创建 ```isr_change_<seq>``` 的顺序持久节点，并将 ```isrChangeSet``` 中的数据保存到这个节点。
 ```
 ls /isr_change_notification
-
-
 ```
 Kafka 控制器为 ```/isr_change_notification``` 添加了一个 Watcher，当有子节点发生变化时会触发 Watcher 通知控制器更新相关元数据信息并向它管理的 broker 节点发送更新元数据的请求，最后删除 ```/isr_change_notification``` 节点下已经处理过的节点:
 ```java
@@ -89,11 +76,15 @@ Kafka 控制器为 ```/isr_change_notification``` 添加了一个 Watcher，当�
 
 当 follower 的 LEO 追赶上 leader 副本之后就可以进入 ISR 集合，追赶上的判定标准是此副本的 LEO 不小于 leader 副本的 HW，ISR 扩充之后同样会更新 ZooKeeper 中的 /brokers/topics/<topic>/paritition/<partition>/state 节点和 isrChangeSet
 
-### 副本同步
 
-follower 副本向 leader 副本拉取数据的细节在 ```ReplicaManager#makeFollower``` 中。
 
-https://www.jianshu.com/p/f9a825c0087a
+### LEO 和 HW
+
+`LEO(LogEndOffset)` 表示副本下一个写入消息的 `offset`，`HW(High Watermark)` 表示副本第一个不可读取的消息的 `offset`。**ISR 集合中最小的 `LEO` 则表示整个分区的 `HW`**。
+
+Kafka 的所有副本都有 `LEO`，`leader` 副本在消息写入日志后会立即更新，而 `follower` 副本需要通过发送 `FetchRequest` 请求拉取消息之后才会更新。
+
+Kakfa 的所有副本也都有 `HW`，`leader` 副本会更新为 ISR 集合中副本的 `FetchRequest` 请求携带的 `LEO` 的最小值，而 `follower` 副本则更新为响应中携带的 `HW` 和自身的 `LEO` 的最小值。
 
 
 
@@ -106,6 +97,8 @@ Kafka 使用 ```recovery-point-offset-checkpoint``` 和 ```replication-offset-ch
 分区日志的删除或者手动删除消息会导致日志的 ```LogStartOffset``` 增长，Kafka 将 ```LogStartOffset``` 持久化在 ```log-start-offset-checkpoint``` 文件中，ReplicaManager 在启动时创建 ```kafka-log-start-offset-checkpoint``` 线程将所有分区的 ```LogStartOffset``` 刷写到文件中，周期由参数 ```log.flush.start.offset.checkpoint.interval.ms``` 设置，默认为 60000ms。
 
 
+
+https://www.jianshu.com/p/f9a825c0087a
 
 
 
