@@ -129,7 +129,7 @@ private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long 
     return new ClusterAndWaitTime(cluster, elapsed);
 }
 ```
-Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 partition 的信息则会阻塞的更新元数据信息，，生产者发送的消息如果指定了超出主题范围的分区，则会导致不断重试获取元数据信息直至超时。
+Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 partition 的信息则会阻塞的更新元数据信息，生产者发送的消息如果指定了超出主题范围的分区，则会导致不断重试获取元数据信息直至超时。
 
 获取元数据的整个过程时长由客户端参数 `metadata.max.age.ms`(默认 5m)设置，超时则抛出异常
 
@@ -142,6 +142,16 @@ Kafka 生产者客户端在发送消息时如果元数据没有 topic 以及 par
 ```
 
 ### `Metadata` 失效
+
+
+
+客户端连接 Kafka 集群需要经历 3 个过程：
+
+- 客户端与 ```bootstrap.servers``` 参数所指定的 Server 连接，并发送 MetadataRequest 请求来获取集群的元数据信息
+- Server 在收到 MetadataRequest 请求之后，返回 MetadataResponse 给客户端，MetadataResponse 中包含了集群的元数据信息
+- 客户端在收到 MetadataResponse 之后解析出其中包含的源数据信息，然后与集群中的每个节点建立连接，之后就可以发送消息了
+
+
 
 
 ## 参考

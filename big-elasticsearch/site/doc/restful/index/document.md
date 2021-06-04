@@ -31,18 +31,16 @@ POST /<target>/_create/<id>
 ```sh
 GET <index>/_doc/<id>
 
-Head <index>/_doc/<id>
+HEAD <index>/_doc/<id>
 
 GET <index>/_source/<id>
-
-HEAD <index>/_source/<_id>
 ```
 
 使用 `GET` 方法可以获取到文档数据，而 `HEAD` 方法可以验证文档是否存在。使用 `_source` 则指定返回的文档只包含源数据。
 
 ### 删除文档
 
-文档删除 API 使用 `DELETE` 方法删除指定索引的指定文档。文档删除时需要保证上次对文档的修改已经分配了序列号，否则会导致 `VersionConflictException`。
+文档删除 API 使用 `DELETE` 方法删除指定索引的指定文档。文档删除时需要保证上次对文档的修改已经分配了版本号，否则会导致 `VersionConflictException`。
 
 ```sh
 DELETE /<index>/_doc/<id>
@@ -58,7 +56,7 @@ DELETE /<index>/_doc/<id>
 
 ```sh
 # 指定文档
-GET /my-index-001/_mget
+curl -X GET /my-index-001/_mget -D
 {
 	"docs":{
 		"type": "_doc",
@@ -93,7 +91,7 @@ action_and_meta_data\n
 optional_source\n
 ```
 
-`index` 和 `create` 动作需要在下一行中指定源数据，而 `update` 动作需要在下一行中指定 `doc`、`script` 等更新文档时指定的字段。
+`index` 和 `create` 动作需要在下一行中指定源数据。
 
 ```shell
 POST _bulk
@@ -102,8 +100,6 @@ POST _bulk
 {"delete": {"_index": "test", "_id": "2"}}
 {"create": {"_index": "test", "_id": "3"}}
 {"field1": "value3"}
-{"update": {"_index": "test", "_id": "1"}}
-{"doc": {"field2": "value2"}}
 ```
 
 

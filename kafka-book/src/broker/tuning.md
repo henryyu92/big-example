@@ -1,7 +1,14 @@
+## 参数调优
 
 
-- `broker.id`：
-- `bootstrap.servers`
+
+### Broker 参数
+
+- `broker.id`：`Broker` 的唯一标识，必须大于等于 0。broker 在启动时会在 ZooKeeper 中创建 `/brokers/ids/<brokerId>` 的临时节点，其他 broker 节点或客户端通过判断该结点是否存在来确定该 broker 的健康状态
+- `broker.id.generation.enable`：是否开启自动生成 `brokerId` 功能，默认是 true。自动生成的 `brokerId` 必须超过参数 ```reserved.broker.max.id``` 配置的基准值，基准值默认是 1000，也就是说默认情况下自动生成的 brokerId 是从 1001 开始
+
+
+
 - `auto.create.topic.enable`|true|是否开启自动创建主题的功能|
 - `auto.leader.relablance.enable`|true|是否开启自动 leader 再均衡的功能|
 - `background.threads`|10|执行后台任务的线程数|
@@ -33,7 +40,5 @@
 - `log.message.timestamp.type`|CreateTime|消息中的时间戳类型|
 - `log.retention.check.interval.ms`|300000|日志清理的检查周期|
 - `num.partitions`|1|创建主题时的默认分区数|
-- `reserved.broker.max.id`|1000|自动创建 broker.id 时保留的最大值，即自动创建 broker.id 时的起始值为 reserved.broker.max.id+1|
 - `create.topic.policy.class.name`||创建主题时用来验证合法性的策略|
-- `broker.id.generation.enable`|true|是否开启自动生成 broker.id 功能|
 - `broker.rack`||配置 broker 的机架信息|
