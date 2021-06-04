@@ -1,6 +1,8 @@
 ## 组协调器
 
-组协调器 (GroupCoordinator) 是管理消费者组与 offset 的组件，每个 Broker 在启动时都会实例化一个 GroupCoordinator。每个消费者组都有对应的组协调器管理，当消费者组内的消费者发生变化时，组协调器会自动根据选定的分区策略进行重分区，组协调器还会管理消费者的 offset，保证当发生重分配时能够正确找回消费者的 offset。
+组协调器 (GroupCoordinator) 是管理消费者组与 offset 的组件，每个 Broker 在启动时都会实例化一个 GroupCoordinator。
+
+每个消费者组都有对应的组协调器管理，当消费者组内的消费者发生变化时，组协调器会自动根据选定的分区策略进行重分区，组协调器还会管理消费者的 offset，保证当发生重分配时能够正确找回消费者的 offset。
 
 ### 消费者组管理
 
@@ -32,7 +34,6 @@ GroupCoordinator 维护的 `GroupMetadataManager` 中缓存了 `ConumerGroup` �
 https://www.cnblogs.com/heyanan/p/12800169.html
 
 
-### `__consumer_offset`
 
 Kafka 将消费者提交的 offset 持久化到内部主题 ```__consumer_offsets``` 中，消费者在向 broker 拉取数据时，broker 在 ```__consumer_offsets``` 中获取拉取的起始消息位置。
 
